@@ -50,13 +50,29 @@ type JWK struct {
 
 // Provider holds the configuration and key material for a DilithiAuth IdP.
 type Provider struct {
-	Issuer string
-	KeyPair *signer.HybridKeyPair
+	Issuer     string
+	KeyPair    *signer.HybridKeyPair
+	KeyManager *signer.KeyManager
 }
 
 // NewProvider creates a Provider from an issuer URL and a pre-generated key pair.
 func NewProvider(issuer string, kp *signer.HybridKeyPair) *Provider {
 	return &Provider{Issuer: issuer, KeyPair: kp}
+}
+
+// NewProviderWithKeyManager creates a Provider that uses a KeyManager for
+// key rotation support. The active key from the manager is used for signing.
+func NewProviderWithKeyManager(issuer string, km *signer.KeyManager) *Provider {
+	return &Provider{Issuer: issuer, KeyManager: km}
+}
+
+// activeKeyPair returns the key pair to use for signing. If a KeyManager is
+// configured, it returns the active key; otherwise it falls back to KeyPair.
+func (p *Provider) activeKeyPair() *signer.HybridKeyPair {
+	if p.KeyManager != nil {
+		return p.KeyManager.ActiveKey()
+	}
+	return p.KeyPair
 }
 
 // DiscoveryDocument returns the OpenID Connect discovery metadata.
@@ -80,20 +96,26 @@ func (p *Provider) DiscoveryDocument() *DiscoveryDocument {
 // JWKSDocument returns the JSON Web Key Set containing the provider's
 // public keys (both Ed25519 and ML-DSA-44 under the same kid).
 func (p *Provider) JWKSDocument() *JWKSDocument {
-	info := p.KeyPair.PublicKeyInfo()
-	return &JWKSDocument{
-		Keys: []JWK{
-			{
-				Kid:        info.Kid,
-				Kty:        "OKP",
-				Crv:        "Ed25519",
-				X:          base64.RawURLEncoding.EncodeToString(info.Ed25519Public),
-				MLDSA44Pub: base64.RawURLEncoding.EncodeToString(info.MLDSAPublic),
-				Use:        "sig",
-				Alg:        "EdDSA+MLDSA44",
-			},
-		},
+	var infos []*signer.PublicKeyInfo
+	if p.KeyManager != nil {
+		infos = p.KeyManager.AllPublicKeys()
+	} else {
+		infos = []*signer.PublicKeyInfo{p.KeyPair.PublicKeyInfo()}
 	}
+
+	keys := make([]JWK, len(infos))
+	for i, info := range infos {
+		keys[i] = JWK{
+			Kid:        info.Kid,
+			Kty:        "OKP",
+			Crv:        "Ed25519",
+			X:          base64.RawURLEncoding.EncodeToString(info.Ed25519Public),
+			MLDSA44Pub: base64.RawURLEncoding.EncodeToString(info.MLDSAPublic),
+			Use:        "sig",
+			Alg:        "EdDSA+MLDSA44",
+		}
+	}
+	return &JWKSDocument{Keys: keys}
 }
 
 // DiscoveryHandler returns an http.HandlerFunc that serves the OIDC
@@ -175,7 +197,8 @@ func (p *Provider) IssueJWTThin(subject string, ttl time.Duration) (*ThinTokenRe
 		return nil, fmt.Errorf("oauth: marshalling claims: %w", err)
 	}
 
-	hybridSig, err := p.KeyPair.Sign(payloadBytes)
+	kp := p.activeKeyPair()
+	hybridSig, err := kp.Sign(payloadBytes)
 	if err != nil {
 		return nil, fmt.Errorf("oauth: hybrid signing: %w", err)
 	}
@@ -188,8 +211,8 @@ func (p *Provider) IssueJWTThin(subject string, ttl time.Duration) (*ThinTokenRe
 
 	// Sign the JWT using the Ed25519 private key via jwt-go.
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	token.Header["kid"] = p.KeyPair.Kid
-	tokenStr, err := token.SignedString(p.KeyPair.Ed25519Private)
+	token.Header["kid"] = kp.Kid
+	tokenStr, err := token.SignedString(kp.Ed25519Private)
 	if err != nil {
 		return nil, fmt.Errorf("oauth: signing JWT: %w", err)
 	}
@@ -222,7 +245,8 @@ func (p *Provider) IssueJWTFull(subject string, ttl time.Duration) (string, erro
 		return "", fmt.Errorf("oauth: marshalling claims: %w", err)
 	}
 
-	hybridSig, err := p.KeyPair.Sign(payloadBytes)
+	kp := p.activeKeyPair()
+	hybridSig, err := kp.Sign(payloadBytes)
 	if err != nil {
 		return "", fmt.Errorf("oauth: hybrid signing: %w", err)
 	}
@@ -239,8 +263,8 @@ func (p *Provider) IssueJWTFull(subject string, ttl time.Duration) (string, erro
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	token.Header["kid"] = p.KeyPair.Kid
-	tokenStr, err := token.SignedString(p.KeyPair.Ed25519Private)
+	token.Header["kid"] = kp.Kid
+	tokenStr, err := token.SignedString(kp.Ed25519Private)
 	if err != nil {
 		return "", fmt.Errorf("oauth: signing JWT: %w", err)
 	}
@@ -302,7 +326,8 @@ func (p *Provider) IssueCWT(subject string, ttl time.Duration) (*CWTResult, erro
 		return nil, fmt.Errorf("oauth: marshalling CWT claims: %w", err)
 	}
 
-	hybridSig, err := p.KeyPair.Sign(claimsBytes)
+	kp := p.activeKeyPair()
+	hybridSig, err := kp.Sign(claimsBytes)
 	if err != nil {
 		return nil, fmt.Errorf("oauth: hybrid signing CWT: %w", err)
 	}

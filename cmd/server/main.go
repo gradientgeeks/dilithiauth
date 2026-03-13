@@ -6,12 +6,20 @@
 //   - JWKS endpoint (/.well-known/jwks.json)
 //   - JWT issuance in both "thin" (sidecar) and "full" (jumbo) modes
 //   - CBOR Web Token (CWT, RFC 8392) issuance
+//   - OAuth 2.0 Authorization Code flow
+//   - Token verification middleware for protected endpoints
+//   - Key rotation with persistence
 //   - MaxHeaderBytes tuned to 16 KiB for PQC-sized tokens
 //
 // Configuration is read from environment variables:
 //
-//	DILITHIAUTH_ISSUER  – base URL of the issuer (default: https://auth.dilithiauth.io)
-//	DILITHIAUTH_ADDR    – listen address (default: :8080)
+//	DILITHIAUTH_ISSUER         – base URL of the issuer (default: https://auth.dilithiauth.io)
+//	DILITHIAUTH_ADDR           – listen address (default: :8080)
+//	DILITHIAUTH_SIGSTORE       – SigStore backend: "memory", "file", "postgres", or "redis" (default: memory)
+//	DILITHIAUTH_SIGSTORE_PATH  – file path for file-backed SigStore (default: ./data/sigstore.json)
+//	DILITHIAUTH_POSTGRES_DSN   – PostgreSQL DSN for postgres-backed SigStore (default: postgres://localhost:5432/dilithiauth?sslmode=disable)
+//	DILITHIAUTH_REDIS_ADDR     – Redis address for redis-backed SigStore (default: localhost:6379)
+//	DILITHIAUTH_KEYS_DIR       – directory for persistent keys (default: empty = ephemeral)
 package main
 
 import (
@@ -27,6 +35,7 @@ import (
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/oauth"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/signer"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/transport"
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/verifier"
 )
 
 func main() {
@@ -35,18 +44,83 @@ func main() {
 
 	log.Printf("DilithiAuth starting – issuer=%s addr=%s", issuer, addr)
 
-	// Generate hybrid key pair (ML-DSA-44 + Ed25519).
-	kp, err := signer.GenerateHybridKeyPair()
-	if err != nil {
-		log.Fatalf("FATAL: generating hybrid key pair: %v", err)
+	// --- SigStore setup ---
+	sigStoreType := getEnv("DILITHIAUTH_SIGSTORE", "memory")
+	var sigStore *transport.SigStore
+	switch sigStoreType {
+	case "file":
+		path := getEnv("DILITHIAUTH_SIGSTORE_PATH", "./data/sigstore.json")
+		fb, err := transport.NewFileSigStore(path)
+		if err != nil {
+			log.Fatalf("FATAL: creating file SigStore: %v", err)
+		}
+		sigStore = transport.NewSigStoreWithBackend(fb)
+		log.Printf("SigStore: file-backed at %s", path)
+	case "postgres":
+		dsn := getEnv("DILITHIAUTH_POSTGRES_DSN", "postgres://localhost:5432/dilithiauth?sslmode=disable")
+		pg, err := transport.NewPostgresSigStore(dsn)
+		if err != nil {
+			log.Fatalf("FATAL: creating PostgreSQL SigStore: %v", err)
+		}
+		sigStore = transport.NewSigStoreWithBackend(pg)
+		log.Printf("SigStore: PostgreSQL-backed at %s", dsn)
+	case "redis":
+		addr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
+		rs, err := transport.NewRedisSigStore(addr)
+		if err != nil {
+			log.Fatalf("FATAL: creating Redis SigStore: %v", err)
+		}
+		sigStore = transport.NewSigStoreWithBackend(rs)
+		log.Printf("SigStore: Redis-backed at %s", addr)
+	default:
+		sigStore = transport.NewSigStore()
+		log.Print("SigStore: in-memory")
 	}
-	log.Printf("Hybrid key pair generated – kid=%s", kp.Kid)
 
-	// Build the OAuth provider.
-	provider := oauth.NewProvider(issuer, kp)
+	// --- Key management setup ---
+	keysDir := getEnv("DILITHIAUTH_KEYS_DIR", "")
+	var provider *oauth.Provider
+	var km *signer.KeyManager
 
-	// Signature sidecar store (in-memory; replace with Redis in production).
-	sigStore := transport.NewSigStore()
+	if keysDir != "" {
+		var err error
+		km, err = signer.NewKeyManager(keysDir)
+		if err != nil {
+			log.Fatalf("FATAL: creating key manager: %v", err)
+		}
+		provider = oauth.NewProviderWithKeyManager(issuer, km)
+		log.Printf("Key manager: persistent at %s – active kid=%s", keysDir, km.ActiveKey().Kid)
+	} else {
+		kp, err := signer.GenerateHybridKeyPair()
+		if err != nil {
+			log.Fatalf("FATAL: generating hybrid key pair: %v", err)
+		}
+		provider = oauth.NewProvider(issuer, kp)
+		log.Printf("Hybrid key pair generated (ephemeral) – kid=%s", kp.Kid)
+	}
+
+	// --- Verifier setup ---
+	var v *verifier.Verifier
+	if km != nil {
+		v = verifier.NewVerifier(km, sigStore)
+	} else {
+		v = verifier.NewVerifierWithKeyPair(provider.KeyPair, sigStore)
+	}
+
+	// --- Authorization code flow setup ---
+	authzStore := oauth.NewAuthzStore()
+	authzStore.AddUser(&oauth.DemoUser{Username: "alice", Password: "password", Subject: "alice"})
+	authzStore.AddUser(&oauth.DemoUser{Username: "bob", Password: "password", Subject: "bob"})
+	authzStore.AddClient(&oauth.DemoClient{
+		ClientID:    "demo-client",
+		RedirectURI: "http://localhost:8080/callback",
+		Name:        "Demo Client",
+	})
+	authzHandlers := &oauth.AuthzHandlers{
+		Provider: provider,
+		Store:    authzStore,
+		SigStore: sigStore,
+	}
 
 	// Build the router.
 	r := chi.NewRouter()
@@ -63,6 +137,26 @@ func main() {
 	r.Post("/token/thin", makeThinTokenHandler(provider, sigStore))
 	r.Post("/token/full", makeFullTokenHandler(provider))
 	r.Post("/token/cwt", makeCWTTokenHandler(provider, sigStore))
+
+	// OAuth 2.0 Authorization Code flow.
+	r.Get("/authorize", authzHandlers.AuthorizeGET)
+	r.Post("/authorize", authzHandlers.AuthorizePOST)
+	r.Post("/token", authzHandlers.TokenExchange)
+
+	// Key rotation admin endpoint.
+	if km != nil {
+		r.Post("/admin/rotate", makeRotateHandler(km))
+	}
+
+	// Protected endpoints (require valid token).
+	r.Group(func(r chi.Router) {
+		r.Use(v.Middleware())
+		r.Get("/protected/whoami", func(w http.ResponseWriter, r *http.Request) {
+			claims := verifier.ClaimsFromContext(r.Context())
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(claims)
+		})
+	})
 
 	// Health check.
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +246,23 @@ func makeCWTTokenHandler(p *oauth.Provider, store *transport.SigStore) http.Hand
 		w.Header().Set("X-Token-Id", result.JWTID)
 		w.Header().Set("X-PQC-Ref", result.PQCRef)
 		_, _ = w.Write(result.Token)
+	}
+}
+
+// makeRotateHandler creates a handler that generates a new key pair.
+func makeRotateHandler(km *signer.KeyManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		newKP, err := km.Rotate()
+		if err != nil {
+			http.Error(w, "key rotation failed", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Key rotated – new active kid=%s", newKP.Kid)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"kid":    newKP.Kid,
+			"status": "rotated",
+		})
 	}
 }
 

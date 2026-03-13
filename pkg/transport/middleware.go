@@ -9,7 +9,6 @@ package transport
 import (
 	"context"
 	"net/http"
-	"sync"
 )
 
 // MaxHeaderBytesForPQC is the recommended MaxHeaderBytes value for a Go
@@ -39,8 +38,6 @@ func NewPQCServer(addr string, handler http.Handler) *http.Server {
 // provide a hook for adding header-size metrics in the future.
 func JumboHeaderMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// No action needed – the net/http server already enforces MaxHeaderBytes.
-		// This middleware documents the flow and can be extended for logging.
 		next.ServeHTTP(w, r)
 	})
 }
@@ -49,55 +46,50 @@ func JumboHeaderMiddleware(next http.Handler) http.Handler {
 // Signature Reference sidecar store
 // -------------------------------------------------------------------
 
-// SigStore is a thread-safe in-memory store for ML-DSA-44 signature bytes
-// keyed by token ID (jti / cti).  In production, replace this with a Redis
-// client or another distributed cache so the store is shared across instances.
-//
-// The store implements the "Signature Reference" strategy described in the
-// DilithiAuth design document: thin tokens carry only a pqc_ref hash, while
-// the full signature lives in this sidecar keyed by jti.
-type SigStore struct {
-	mu    sync.RWMutex
-	store map[string][]byte
+// SigStoreBackend is the interface that signature store backends must implement.
+type SigStoreBackend interface {
+	Put(jti string, sig []byte)
+	Get(jti string) ([]byte, bool)
+	Delete(jti string)
+	Len() int
 }
 
-// NewSigStore creates an empty SigStore.
+// SigStore is a thin wrapper that delegates to a SigStoreBackend. It
+// implements the "Signature Reference" strategy: thin tokens carry only a
+// pqc_ref hash, while the full signature lives in this sidecar keyed by jti.
+type SigStore struct {
+	backend SigStoreBackend
+}
+
+// NewSigStore creates a SigStore backed by an in-memory MemorySigStore.
 func NewSigStore() *SigStore {
-	return &SigStore{store: make(map[string][]byte)}
+	return &SigStore{backend: NewMemorySigStore()}
+}
+
+// NewSigStoreWithBackend creates a SigStore backed by the given backend.
+func NewSigStoreWithBackend(b SigStoreBackend) *SigStore {
+	return &SigStore{backend: b}
 }
 
 // Put stores the ML-DSA-44 signature bytes under the given token ID.
 func (s *SigStore) Put(jti string, sig []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Copy to avoid the caller mutating the stored slice.
-	stored := make([]byte, len(sig))
-	copy(stored, sig)
-	s.store[jti] = stored
+	s.backend.Put(jti, sig)
 }
 
 // Get retrieves the ML-DSA-44 signature for the given token ID.
 // Returns (sig, true) on a cache hit and (nil, false) on a miss.
 func (s *SigStore) Get(jti string) ([]byte, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	sig, ok := s.store[jti]
-	return sig, ok
+	return s.backend.Get(jti)
 }
 
 // Delete removes the signature entry for the given token ID.
-// Call this when a token is revoked or has expired.
 func (s *SigStore) Delete(jti string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.store, jti)
+	s.backend.Delete(jti)
 }
 
 // Len returns the number of entries currently in the store.
 func (s *SigStore) Len() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.store)
+	return s.backend.Len()
 }
 
 // -------------------------------------------------------------------

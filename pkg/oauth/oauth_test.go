@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,16 @@ func newProvider(t *testing.T) *oauth.Provider {
 		t.Fatalf("GenerateHybridKeyPair() error = %v", err)
 	}
 	return oauth.NewProvider("https://auth.dilithiauth.io", kp)
+}
+
+func newKeyManagerProvider(t *testing.T) *oauth.Provider {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "keys")
+	km, err := signer.NewKeyManager(dir)
+	if err != nil {
+		t.Fatalf("NewKeyManager() error = %v", err)
+	}
+	return oauth.NewProviderWithKeyManager("https://auth.dilithiauth.io", km)
 }
 
 // --- Discovery tests ---
@@ -209,5 +220,49 @@ func TestCWTSmallerThanJWT(t *testing.T) {
 	t.Logf("CWT size: %d bytes, JWT (thin) size: %d bytes", cwtSize, jwtSize)
 	if cwtSize >= jwtSize {
 		t.Errorf("expected CWT (%d bytes) to be smaller than thin JWT (%d bytes)", cwtSize, jwtSize)
+	}
+}
+
+// --- KeyManager-based Provider tests ---
+
+func TestKeyManagerProvider_IssueJWTThin(t *testing.T) {
+	p := newKeyManagerProvider(t)
+	result, err := p.IssueJWTThin("alice", time.Hour)
+	if err != nil {
+		t.Fatalf("IssueJWTThin() error = %v", err)
+	}
+	if result.Token == "" {
+		t.Error("Token is empty")
+	}
+
+	parsed, err := jwt.ParseWithClaims(result.Token, &oauth.HybridClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			return p.KeyManager.ActiveKey().Ed25519Public, nil
+		},
+		jwt.WithValidMethods([]string{"EdDSA"}),
+	)
+	if err != nil {
+		t.Fatalf("jwt.ParseWithClaims() error = %v", err)
+	}
+	if !parsed.Valid {
+		t.Error("parsed token is not valid")
+	}
+}
+
+func TestKeyManagerProvider_JWKSAfterRotation(t *testing.T) {
+	p := newKeyManagerProvider(t)
+	p.KeyManager.Rotate()
+
+	doc := p.JWKSDocument()
+	if len(doc.Keys) != 2 {
+		t.Errorf("JWKS keys count = %d, want 2", len(doc.Keys))
+	}
+
+	kids := map[string]bool{}
+	for _, k := range doc.Keys {
+		kids[k.Kid] = true
+	}
+	if len(kids) != 2 {
+		t.Error("JWKS should have 2 distinct kids after rotation")
 	}
 }
