@@ -8,6 +8,15 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 )
 
+// KeyStore is the interface for persisting keys and tracking the active key.
+type KeyStore interface {
+	Save(kp *HybridKeyPair) error
+	Load(kid string) (*HybridKeyPair, error)
+	LoadAll() ([]*HybridKeyPair, error)
+	SetActiveKid(kid string) error
+	GetActiveKid() (string, error)
+}
+
 // SerializedKeyPair is the JSON-serialisable form of a HybridKeyPair.
 type SerializedKeyPair struct {
 	Kid            string `json:"kid"`

@@ -13,7 +13,7 @@ import (
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/transport"
 )
 
-func newAuthzStore() *oauth.AuthzStore {
+func newAuthzStore() oauth.AuthzStore {
 	s := oauth.NewAuthzStore()
 	s.AddUser(&oauth.DemoUser{Username: "alice", Password: "password", Subject: "alice-sub"})
 	s.AddClient(&oauth.DemoClient{ClientID: "demo-client", RedirectURI: "http://localhost:8080/callback", Name: "Demo"})

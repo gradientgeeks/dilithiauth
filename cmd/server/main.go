@@ -78,11 +78,24 @@ func main() {
 	}
 
 	// --- Key management setup ---
+	keyStoreType := getEnv("DILITHIAUTH_KEYSTORE", "file")
 	keysDir := getEnv("DILITHIAUTH_KEYS_DIR", "")
 	var provider *oauth.Provider
 	var km *signer.KeyManager
 
-	if keysDir != "" {
+	if keyStoreType == "redis" {
+		addr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
+		rs, err := signer.NewRedisKeyStore(addr)
+		if err != nil {
+			log.Fatalf("FATAL: creating Redis KeyStore: %v", err)
+		}
+		km, err = signer.NewKeyManagerWithStore(rs)
+		if err != nil {
+			log.Fatalf("FATAL: creating key manager with Redis: %v", err)
+		}
+		provider = oauth.NewProviderWithKeyManager(issuer, km)
+		log.Printf("Key manager: Redis-backed at %s – active kid=%s", addr, km.ActiveKey().Kid)
+	} else if keysDir != "" {
 		var err error
 		km, err = signer.NewKeyManager(keysDir)
 		if err != nil {
@@ -108,7 +121,22 @@ func main() {
 	}
 
 	// --- Authorization code flow setup ---
-	authzStore := oauth.NewAuthzStore()
+	var authzStore oauth.AuthzStore
+	authzStoreType := getEnv("DILITHIAUTH_AUTHZSTORE", "memory")
+	switch authzStoreType {
+	case "redis":
+		addr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
+		rs, err := oauth.NewRedisAuthzStore(addr)
+		if err != nil {
+			log.Fatalf("FATAL: creating Redis AuthzStore: %v", err)
+		}
+		authzStore = rs
+		log.Printf("AuthzStore: Redis-backed at %s", addr)
+	default:
+		authzStore = oauth.NewAuthzStore()
+		log.Print("AuthzStore: in-memory")
+	}
+
 	authzStore.AddUser(&oauth.DemoUser{Username: "alice", Password: "password", Subject: "alice"})
 	authzStore.AddUser(&oauth.DemoUser{Username: "bob", Password: "password", Subject: "bob"})
 	authzStore.AddClient(&oauth.DemoClient{

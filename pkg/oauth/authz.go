@@ -24,26 +24,36 @@ type DemoClient struct {
 
 // AuthCode represents an issued authorization code.
 type AuthCode struct {
-	Code        string
-	Subject     string
-	ClientID    string
-	RedirectURI string
-	Scope       string
-	ExpiresAt   time.Time
-	Used        bool
+	Code        string    `json:"code"`
+	Subject     string    `json:"subject"`
+	ClientID    string    `json:"client_id"`
+	RedirectURI string    `json:"redirect_uri"`
+	Scope       string    `json:"scope"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Used        bool      `json:"used"`
 }
 
-// AuthzStore holds demo users, clients, and authorization codes.
-type AuthzStore struct {
+// AuthzStore is the interface for managing users, clients, and authorization codes.
+type AuthzStore interface {
+	AddUser(u *DemoUser)
+	AddClient(c *DemoClient)
+	AuthenticateUser(username, password string) (*DemoUser, error)
+	ValidateClient(clientID, redirectURI string) (*DemoClient, error)
+	CreateCode(subject, clientID, redirectURI, scope string) (string, error)
+	RedeemCode(code, clientID, redirectURI string) (*AuthCode, error)
+}
+
+// MemoryAuthzStore holds demo users, clients, and authorization codes in memory.
+type MemoryAuthzStore struct {
 	mu      sync.RWMutex
-	users   map[string]*DemoUser  // keyed by username
+	users   map[string]*DemoUser   // keyed by username
 	clients map[string]*DemoClient // keyed by client_id
 	codes   map[string]*AuthCode   // keyed by code
 }
 
-// NewAuthzStore creates an empty AuthzStore.
-func NewAuthzStore() *AuthzStore {
-	return &AuthzStore{
+// NewAuthzStore creates an empty MemoryAuthzStore.
+func NewAuthzStore() *MemoryAuthzStore {
+	return &MemoryAuthzStore{
 		users:   make(map[string]*DemoUser),
 		clients: make(map[string]*DemoClient),
 		codes:   make(map[string]*AuthCode),
@@ -51,21 +61,21 @@ func NewAuthzStore() *AuthzStore {
 }
 
 // AddUser registers a demo user.
-func (s *AuthzStore) AddUser(u *DemoUser) {
+func (s *MemoryAuthzStore) AddUser(u *DemoUser) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.users[u.Username] = u
 }
 
 // AddClient registers a demo client.
-func (s *AuthzStore) AddClient(c *DemoClient) {
+func (s *MemoryAuthzStore) AddClient(c *DemoClient) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.clients[c.ClientID] = c
 }
 
 // AuthenticateUser checks username/password and returns the user on success.
-func (s *AuthzStore) AuthenticateUser(username, password string) (*DemoUser, error) {
+func (s *MemoryAuthzStore) AuthenticateUser(username, password string) (*DemoUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	u, ok := s.users[username]
@@ -76,7 +86,7 @@ func (s *AuthzStore) AuthenticateUser(username, password string) (*DemoUser, err
 }
 
 // ValidateClient checks that the client_id exists and the redirect_uri matches.
-func (s *AuthzStore) ValidateClient(clientID, redirectURI string) (*DemoClient, error) {
+func (s *MemoryAuthzStore) ValidateClient(clientID, redirectURI string) (*DemoClient, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	c, ok := s.clients[clientID]
@@ -90,7 +100,7 @@ func (s *AuthzStore) ValidateClient(clientID, redirectURI string) (*DemoClient, 
 }
 
 // CreateCode generates and stores an authorization code.
-func (s *AuthzStore) CreateCode(subject, clientID, redirectURI, scope string) (string, error) {
+func (s *MemoryAuthzStore) CreateCode(subject, clientID, redirectURI, scope string) (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -106,13 +116,14 @@ func (s *AuthzStore) CreateCode(subject, clientID, redirectURI, scope string) (s
 		RedirectURI: redirectURI,
 		Scope:       scope,
 		ExpiresAt:   time.Now().Add(10 * time.Minute),
+		Used:        false,
 	}
 	return code, nil
 }
 
 // RedeemCode validates and consumes an authorization code. It checks expiry,
 // single-use, and client_id/redirect_uri match.
-func (s *AuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthCode, error) {
+func (s *MemoryAuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthCode, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ac, ok := s.codes[code]

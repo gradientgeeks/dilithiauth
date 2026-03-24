@@ -17,7 +17,7 @@ type SigStorePutter interface {
 // AuthzHandlers provides HTTP handlers for the OAuth 2.0 authorization code flow.
 type AuthzHandlers struct {
 	Provider *Provider
-	Store    *AuthzStore
+	Store    AuthzStore
 	SigStore SigStorePutter
 }
 
