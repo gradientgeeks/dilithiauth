@@ -8,21 +8,22 @@ import (
 	"time"
 )
 
-// DemoUser represents a user in the demo identity store.
-type DemoUser struct {
+// User represents an identity stored in the demo in-memory AuthzStore.
+// Production deployments should use pkg/userstore.PostgresUserStore instead.
+type User struct {
 	Username string
-	Password string
+	Password string // plaintext — demo only; see pkg/userstore for Argon2id
 	Subject  string
 }
 
-// DemoClient represents a registered OAuth client.
-type DemoClient struct {
+// OAuthClient represents a registered OAuth 2.0 client application.
+type OAuthClient struct {
 	ClientID    string
 	RedirectURI string
 	Name        string
 }
 
-// AuthCode represents an issued authorization code.
+// AuthCode represents an issued, single-use authorization code.
 type AuthCode struct {
 	Code        string    `json:"code"`
 	Subject     string    `json:"subject"`
@@ -33,63 +34,77 @@ type AuthCode struct {
 	Used        bool      `json:"used"`
 }
 
-// AuthzStore is the interface for managing users, clients, and authorization codes.
+// AuthzStore manages OAuth clients and authorization codes, scoped per tenant.
+// All methods receive tenantID as their first argument so a single store
+// instance can serve multiple isolated tenants.
 type AuthzStore interface {
-	AddUser(u *DemoUser)
-	AddClient(c *DemoClient)
-	AuthenticateUser(username, password string) (*DemoUser, error)
-	ValidateClient(clientID, redirectURI string) (*DemoClient, error)
-	CreateCode(subject, clientID, redirectURI, scope string) (string, error)
-	RedeemCode(code, clientID, redirectURI string) (*AuthCode, error)
+	AddUser(tenantID string, u *User)
+	AddClient(tenantID string, c *OAuthClient)
+	AuthenticateUser(tenantID, username, password string) (*User, error)
+	ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error)
+	CreateCode(tenantID, subject, clientID, redirectURI, scope string) (string, error)
+	RedeemCode(tenantID, code, clientID, redirectURI string) (*AuthCode, error)
 }
 
-// MemoryAuthzStore holds demo users, clients, and authorization codes in memory.
+// MemoryAuthzStore is a fully in-memory, multi-tenant AuthzStore.
+// It is intended for development and testing only — passwords are plaintext
+// and state is lost on restart.
 type MemoryAuthzStore struct {
 	mu      sync.RWMutex
-	users   map[string]*DemoUser   // keyed by username
-	clients map[string]*DemoClient // keyed by client_id
-	codes   map[string]*AuthCode   // keyed by code
+	users   map[string]map[string]*User        // [tenantID][username]
+	clients map[string]map[string]*OAuthClient // [tenantID][clientID]
+	codes   map[string]*AuthCode               // keyed by code (globally unique)
 }
 
 // NewAuthzStore creates an empty MemoryAuthzStore.
 func NewAuthzStore() *MemoryAuthzStore {
 	return &MemoryAuthzStore{
-		users:   make(map[string]*DemoUser),
-		clients: make(map[string]*DemoClient),
+		users:   make(map[string]map[string]*User),
+		clients: make(map[string]map[string]*OAuthClient),
 		codes:   make(map[string]*AuthCode),
 	}
 }
 
-// AddUser registers a demo user.
-func (s *MemoryAuthzStore) AddUser(u *DemoUser) {
+func (s *MemoryAuthzStore) AddUser(tenantID string, u *User) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.users[u.Username] = u
+	if s.users[tenantID] == nil {
+		s.users[tenantID] = make(map[string]*User)
+	}
+	s.users[tenantID][u.Username] = u
 }
 
-// AddClient registers a demo client.
-func (s *MemoryAuthzStore) AddClient(c *DemoClient) {
+func (s *MemoryAuthzStore) AddClient(tenantID string, c *OAuthClient) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.clients[c.ClientID] = c
+	if s.clients[tenantID] == nil {
+		s.clients[tenantID] = make(map[string]*OAuthClient)
+	}
+	s.clients[tenantID][c.ClientID] = c
 }
 
-// AuthenticateUser checks username/password and returns the user on success.
-func (s *MemoryAuthzStore) AuthenticateUser(username, password string) (*DemoUser, error) {
+func (s *MemoryAuthzStore) AuthenticateUser(tenantID, username, password string) (*User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	u, ok := s.users[username]
+	tenant := s.users[tenantID]
+	if tenant == nil {
+		return nil, errors.New("invalid credentials")
+	}
+	u, ok := tenant[username]
 	if !ok || u.Password != password {
 		return nil, errors.New("invalid credentials")
 	}
 	return u, nil
 }
 
-// ValidateClient checks that the client_id exists and the redirect_uri matches.
-func (s *MemoryAuthzStore) ValidateClient(clientID, redirectURI string) (*DemoClient, error) {
+func (s *MemoryAuthzStore) ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	c, ok := s.clients[clientID]
+	tenant := s.clients[tenantID]
+	if tenant == nil {
+		return nil, errors.New("unknown client")
+	}
+	c, ok := tenant[clientID]
 	if !ok {
 		return nil, errors.New("unknown client")
 	}
@@ -99,8 +114,7 @@ func (s *MemoryAuthzStore) ValidateClient(clientID, redirectURI string) (*DemoCl
 	return c, nil
 }
 
-// CreateCode generates and stores an authorization code.
-func (s *MemoryAuthzStore) CreateCode(subject, clientID, redirectURI, scope string) (string, error) {
+func (s *MemoryAuthzStore) CreateCode(tenantID, subject, clientID, redirectURI, scope string) (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -121,9 +135,7 @@ func (s *MemoryAuthzStore) CreateCode(subject, clientID, redirectURI, scope stri
 	return code, nil
 }
 
-// RedeemCode validates and consumes an authorization code. It checks expiry,
-// single-use, and client_id/redirect_uri match.
-func (s *MemoryAuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthCode, error) {
+func (s *MemoryAuthzStore) RedeemCode(tenantID, code, clientID, redirectURI string) (*AuthCode, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ac, ok := s.codes[code]

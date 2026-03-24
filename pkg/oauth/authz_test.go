@@ -10,13 +10,16 @@ import (
 	"time"
 
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/oauth"
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/tenant"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/transport"
 )
 
+const testTenant = tenant.DefaultTenantID
+
 func newAuthzStore() oauth.AuthzStore {
 	s := oauth.NewAuthzStore()
-	s.AddUser(&oauth.DemoUser{Username: "alice", Password: "password", Subject: "alice-sub"})
-	s.AddClient(&oauth.DemoClient{ClientID: "demo-client", RedirectURI: "http://localhost:8080/callback", Name: "Demo"})
+	s.AddUser(testTenant, &oauth.User{Username: "alice", Password: "password", Subject: "alice-sub"})
+	s.AddClient(testTenant, &oauth.OAuthClient{ClientID: "demo-client", RedirectURI: "http://localhost:8080/callback", Name: "Demo"})
 	return s
 }
 
@@ -25,7 +28,7 @@ func newAuthzStore() oauth.AuthzStore {
 func TestAuthzStore_AuthenticateUser(t *testing.T) {
 	s := newAuthzStore()
 
-	u, err := s.AuthenticateUser("alice", "password")
+	u, err := s.AuthenticateUser(testTenant, "alice", "password")
 	if err != nil {
 		t.Fatalf("AuthenticateUser() error = %v", err)
 	}
@@ -33,21 +36,30 @@ func TestAuthzStore_AuthenticateUser(t *testing.T) {
 		t.Errorf("Subject = %q, want %q", u.Subject, "alice-sub")
 	}
 
-	_, err = s.AuthenticateUser("alice", "wrong")
+	_, err = s.AuthenticateUser(testTenant, "alice", "wrong")
 	if err == nil {
 		t.Error("AuthenticateUser() with wrong password should fail")
 	}
 
-	_, err = s.AuthenticateUser("nobody", "password")
+	_, err = s.AuthenticateUser(testTenant, "nobody", "password")
 	if err == nil {
 		t.Error("AuthenticateUser() with unknown user should fail")
+	}
+}
+
+func TestAuthzStore_AuthenticateUser_TenantIsolation(t *testing.T) {
+	s := newAuthzStore()
+	// alice exists in testTenant but not in "other-tenant"
+	_, err := s.AuthenticateUser("other-tenant", "alice", "password")
+	if err == nil {
+		t.Error("AuthenticateUser() should fail for unknown tenant")
 	}
 }
 
 func TestAuthzStore_ValidateClient(t *testing.T) {
 	s := newAuthzStore()
 
-	c, err := s.ValidateClient("demo-client", "http://localhost:8080/callback")
+	c, err := s.ValidateClient(testTenant, "demo-client", "http://localhost:8080/callback")
 	if err != nil {
 		t.Fatalf("ValidateClient() error = %v", err)
 	}
@@ -55,12 +67,12 @@ func TestAuthzStore_ValidateClient(t *testing.T) {
 		t.Errorf("Name = %q, want %q", c.Name, "Demo")
 	}
 
-	_, err = s.ValidateClient("demo-client", "http://evil.com/callback")
+	_, err = s.ValidateClient(testTenant, "demo-client", "http://evil.com/callback")
 	if err == nil {
 		t.Error("ValidateClient() with wrong redirect_uri should fail")
 	}
 
-	_, err = s.ValidateClient("unknown", "http://localhost:8080/callback")
+	_, err = s.ValidateClient(testTenant, "unknown", "http://localhost:8080/callback")
 	if err == nil {
 		t.Error("ValidateClient() with unknown client should fail")
 	}
@@ -69,12 +81,12 @@ func TestAuthzStore_ValidateClient(t *testing.T) {
 func TestAuthzStore_CreateRedeemCode(t *testing.T) {
 	s := newAuthzStore()
 
-	code, err := s.CreateCode("alice-sub", "demo-client", "http://localhost:8080/callback", "openid")
+	code, err := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "openid")
 	if err != nil {
 		t.Fatalf("CreateCode() error = %v", err)
 	}
 
-	ac, err := s.RedeemCode(code, "demo-client", "http://localhost:8080/callback")
+	ac, err := s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback")
 	if err != nil {
 		t.Fatalf("RedeemCode() error = %v", err)
 	}
@@ -85,10 +97,10 @@ func TestAuthzStore_CreateRedeemCode(t *testing.T) {
 
 func TestAuthzStore_RedeemCode_AlreadyUsed(t *testing.T) {
 	s := newAuthzStore()
-	code, _ := s.CreateCode("alice-sub", "demo-client", "http://localhost:8080/callback", "")
-	s.RedeemCode(code, "demo-client", "http://localhost:8080/callback")
+	code, _ := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "")
+	s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback")
 
-	_, err := s.RedeemCode(code, "demo-client", "http://localhost:8080/callback")
+	_, err := s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback")
 	if err == nil {
 		t.Error("RedeemCode() should fail on reuse")
 	}
@@ -96,9 +108,9 @@ func TestAuthzStore_RedeemCode_AlreadyUsed(t *testing.T) {
 
 func TestAuthzStore_RedeemCode_WrongClient(t *testing.T) {
 	s := newAuthzStore()
-	code, _ := s.CreateCode("alice-sub", "demo-client", "http://localhost:8080/callback", "")
+	code, _ := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "")
 
-	_, err := s.RedeemCode(code, "wrong-client", "http://localhost:8080/callback")
+	_, err := s.RedeemCode(testTenant, code, "wrong-client", "http://localhost:8080/callback")
 	if err == nil {
 		t.Error("RedeemCode() with wrong client should fail")
 	}
@@ -106,7 +118,7 @@ func TestAuthzStore_RedeemCode_WrongClient(t *testing.T) {
 
 func TestAuthzStore_RedeemCode_InvalidCode(t *testing.T) {
 	s := newAuthzStore()
-	_, err := s.RedeemCode("nonexistent", "demo-client", "http://localhost:8080/callback")
+	_, err := s.RedeemCode(testTenant, "nonexistent", "demo-client", "http://localhost:8080/callback")
 	if err == nil {
 		t.Error("RedeemCode() with invalid code should fail")
 	}
@@ -123,12 +135,17 @@ func newHandlers(t *testing.T) (*oauth.AuthzHandlers, *transport.SigStore) {
 	return h, store
 }
 
+// injectTenant injects the default tenant ID into a request context.
+func injectTenant(r *http.Request) *http.Request {
+	return r.WithContext(tenant.WithTenant(r.Context(), testTenant))
+}
+
 func TestAuthorizeGET_ReturnsForm(t *testing.T) {
 	h, _ := newHandlers(t)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet,
-		"/authorize?client_id=demo-client&redirect_uri=http://localhost:8080/callback&state=xyz&scope=openid", nil)
+	req := injectTenant(httptest.NewRequest(http.MethodGet,
+		"/authorize?client_id=demo-client&redirect_uri=http://localhost:8080/callback&state=xyz&scope=openid", nil))
 	h.AuthorizeGET(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -147,7 +164,7 @@ func TestAuthorizeGET_MissingParams(t *testing.T) {
 	h, _ := newHandlers(t)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/authorize", nil)
+	req := injectTenant(httptest.NewRequest(http.MethodGet, "/authorize", nil))
 	h.AuthorizeGET(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
@@ -166,7 +183,7 @@ func TestAuthorizePOST_RedirectsWithCode(t *testing.T) {
 		"state":        {"xyz"},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/authorize", strings.NewReader(form.Encode()))
+	req := injectTenant(httptest.NewRequest(http.MethodPost, "/authorize", strings.NewReader(form.Encode())))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.AuthorizePOST(rec, req)
 
@@ -192,7 +209,7 @@ func TestAuthorizePOST_BadCredentials(t *testing.T) {
 		"redirect_uri": {"http://localhost:8080/callback"},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/authorize", strings.NewReader(form.Encode()))
+	req := injectTenant(httptest.NewRequest(http.MethodPost, "/authorize", strings.NewReader(form.Encode())))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.AuthorizePOST(rec, req)
 
@@ -204,7 +221,7 @@ func TestAuthorizePOST_BadCredentials(t *testing.T) {
 func TestTokenExchange_ValidCode(t *testing.T) {
 	h, _ := newHandlers(t)
 
-	code, err := h.Store.CreateCode("alice-sub", "demo-client", "http://localhost:8080/callback", "openid")
+	code, err := h.Store.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "openid")
 	if err != nil {
 		t.Fatalf("CreateCode() error = %v", err)
 	}
@@ -216,7 +233,7 @@ func TestTokenExchange_ValidCode(t *testing.T) {
 		"redirect_uri": {"http://localhost:8080/callback"},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+	req := injectTenant(httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode())))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.TokenExchange(rec, req)
 
@@ -246,7 +263,7 @@ func TestTokenExchange_InvalidCode(t *testing.T) {
 		"redirect_uri": {"http://localhost:8080/callback"},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+	req := injectTenant(httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode())))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.TokenExchange(rec, req)
 
@@ -262,7 +279,7 @@ func TestTokenExchange_UnsupportedGrant(t *testing.T) {
 		"grant_type": {"client_credentials"},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+	req := injectTenant(httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode())))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.TokenExchange(rec, req)
 
@@ -278,8 +295,8 @@ func TestAuthzFlow_EndToEnd(t *testing.T) {
 
 	// Step 1: GET /authorize → login form.
 	rec1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodGet,
-		"/authorize?client_id=demo-client&redirect_uri=http://localhost:8080/callback&response_type=code&state=xyz", nil)
+	req1 := injectTenant(httptest.NewRequest(http.MethodGet,
+		"/authorize?client_id=demo-client&redirect_uri=http://localhost:8080/callback&response_type=code&state=xyz", nil))
 	h.AuthorizeGET(rec1, req1)
 	if rec1.Code != http.StatusOK {
 		t.Fatalf("GET /authorize status = %d", rec1.Code)
@@ -294,7 +311,7 @@ func TestAuthzFlow_EndToEnd(t *testing.T) {
 		"state":        {"xyz"},
 	}
 	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/authorize", strings.NewReader(form.Encode()))
+	req2 := injectTenant(httptest.NewRequest(http.MethodPost, "/authorize", strings.NewReader(form.Encode())))
 	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.AuthorizePOST(rec2, req2)
 	if rec2.Code != http.StatusFound {
@@ -316,7 +333,7 @@ func TestAuthzFlow_EndToEnd(t *testing.T) {
 		"redirect_uri": {"http://localhost:8080/callback"},
 	}
 	rec3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(tokenForm.Encode()))
+	req3 := injectTenant(httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(tokenForm.Encode())))
 	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.TokenExchange(rec3, req3)
 	if rec3.Code != http.StatusOK {
@@ -333,7 +350,7 @@ func TestAuthzFlow_EndToEnd(t *testing.T) {
 
 	// Step 4: Replay same code → should fail.
 	rec4 := httptest.NewRecorder()
-	req4 := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(tokenForm.Encode()))
+	req4 := injectTenant(httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(tokenForm.Encode())))
 	req4.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.TokenExchange(rec4, req4)
 	if rec4.Code != http.StatusBadRequest {

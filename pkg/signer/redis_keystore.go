@@ -15,8 +15,14 @@ type RedisKeyStore struct {
 	prefix string
 }
 
-// NewRedisKeyStore creates a new RedisKeyStore.
+// NewRedisKeyStore creates a new RedisKeyStore using the default key prefix.
 func NewRedisKeyStore(redisAddr string) (*RedisKeyStore, error) {
+	return NewRedisKeyStoreWithPrefix(redisAddr, "dilithiauth:keys:")
+}
+
+// NewRedisKeyStoreWithPrefix creates a RedisKeyStore with a custom prefix,
+// enabling per-tenant key isolation (e.g. "dilithiauth:keys:acme:").
+func NewRedisKeyStoreWithPrefix(redisAddr, prefix string) (*RedisKeyStore, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: redisAddr,
 	})
@@ -29,7 +35,7 @@ func NewRedisKeyStore(redisAddr string) (*RedisKeyStore, error) {
 	return &RedisKeyStore{
 		client: rdb,
 		ctx:    ctx,
-		prefix: "dilithiauth:keys:",
+		prefix: prefix,
 	}, nil
 }
 

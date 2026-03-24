@@ -6,7 +6,7 @@
 //   - JWKS endpoint (/.well-known/jwks.json)
 //   - JWT issuance in both "thin" (sidecar) and "full" (jumbo) modes
 //   - CBOR Web Token (CWT, RFC 8392) issuance
-//   - OAuth 2.0 Authorization Code flow
+//   - OAuth 2.0 Authorization Code flow with multi-tenant scoping
 //   - Token verification middleware for protected endpoints
 //   - Key rotation with persistence
 //   - MaxHeaderBytes tuned to 16 KiB for PQC-sized tokens
@@ -17,9 +17,11 @@
 //	DILITHIAUTH_ADDR           – listen address (default: :8080)
 //	DILITHIAUTH_SIGSTORE       – SigStore backend: "memory", "file", "postgres", or "redis" (default: memory)
 //	DILITHIAUTH_SIGSTORE_PATH  – file path for file-backed SigStore (default: ./data/sigstore.json)
-//	DILITHIAUTH_POSTGRES_DSN   – PostgreSQL DSN for postgres-backed SigStore (default: postgres://localhost:5432/dilithiauth?sslmode=disable)
-//	DILITHIAUTH_REDIS_ADDR     – Redis address for redis-backed SigStore (default: localhost:6379)
+//	DILITHIAUTH_POSTGRES_DSN   – PostgreSQL DSN (default: postgres://localhost:5432/dilithiauth?sslmode=disable)
+//	DILITHIAUTH_REDIS_ADDR     – Redis address (default: localhost:6379)
 //	DILITHIAUTH_KEYS_DIR       – directory for persistent keys (default: empty = ephemeral)
+//	DILITHIAUTH_KEYSTORE       – key store backend: "file" or "redis" (default: file)
+//	DILITHIAUTH_AUTHZSTORE     – auth code store backend: "memory" or "redis" (default: memory)
 package main
 
 import (
@@ -34,6 +36,7 @@ import (
 
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/oauth"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/signer"
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/tenant"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/transport"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/verifier"
 )
@@ -65,13 +68,13 @@ func main() {
 		sigStore = transport.NewSigStoreWithBackend(pg)
 		log.Printf("SigStore: PostgreSQL-backed at %s", dsn)
 	case "redis":
-		addr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
-		rs, err := transport.NewRedisSigStore(addr)
+		redisAddr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
+		rs, err := transport.NewRedisSigStore(redisAddr)
 		if err != nil {
 			log.Fatalf("FATAL: creating Redis SigStore: %v", err)
 		}
 		sigStore = transport.NewSigStoreWithBackend(rs)
-		log.Printf("SigStore: Redis-backed at %s", addr)
+		log.Printf("SigStore: Redis-backed at %s", redisAddr)
 	default:
 		sigStore = transport.NewSigStore()
 		log.Print("SigStore: in-memory")
@@ -84,8 +87,8 @@ func main() {
 	var km *signer.KeyManager
 
 	if keyStoreType == "redis" {
-		addr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
-		rs, err := signer.NewRedisKeyStore(addr)
+		redisAddr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
+		rs, err := signer.NewRedisKeyStore(redisAddr)
 		if err != nil {
 			log.Fatalf("FATAL: creating Redis KeyStore: %v", err)
 		}
@@ -94,7 +97,7 @@ func main() {
 			log.Fatalf("FATAL: creating key manager with Redis: %v", err)
 		}
 		provider = oauth.NewProviderWithKeyManager(issuer, km)
-		log.Printf("Key manager: Redis-backed at %s – active kid=%s", addr, km.ActiveKey().Kid)
+		log.Printf("Key manager: Redis-backed at %s – active kid=%s", redisAddr, km.ActiveKey().Kid)
 	} else if keysDir != "" {
 		var err error
 		km, err = signer.NewKeyManager(keysDir)
@@ -125,21 +128,22 @@ func main() {
 	authzStoreType := getEnv("DILITHIAUTH_AUTHZSTORE", "memory")
 	switch authzStoreType {
 	case "redis":
-		addr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
-		rs, err := oauth.NewRedisAuthzStore(addr)
+		redisAddr := getEnv("DILITHIAUTH_REDIS_ADDR", "localhost:6379")
+		rs, err := oauth.NewRedisAuthzStore(redisAddr)
 		if err != nil {
 			log.Fatalf("FATAL: creating Redis AuthzStore: %v", err)
 		}
 		authzStore = rs
-		log.Printf("AuthzStore: Redis-backed at %s", addr)
+		log.Printf("AuthzStore: Redis-backed at %s", redisAddr)
 	default:
 		authzStore = oauth.NewAuthzStore()
 		log.Print("AuthzStore: in-memory")
 	}
 
-	authzStore.AddUser(&oauth.DemoUser{Username: "alice", Password: "password", Subject: "alice"})
-	authzStore.AddUser(&oauth.DemoUser{Username: "bob", Password: "password", Subject: "bob"})
-	authzStore.AddClient(&oauth.DemoClient{
+	// Seed demo users and client under the default tenant.
+	authzStore.AddUser(tenant.DefaultTenantID, &oauth.User{Username: "alice", Password: "password", Subject: "alice"})
+	authzStore.AddUser(tenant.DefaultTenantID, &oauth.User{Username: "bob", Password: "password", Subject: "bob"})
+	authzStore.AddClient(tenant.DefaultTenantID, &oauth.OAuthClient{
 		ClientID:    "demo-client",
 		RedirectURI: "http://localhost:8080/callback",
 		Name:        "Demo Client",
@@ -156,6 +160,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(transport.JumboHeaderMiddleware)
 	r.Use(transport.SigStoreMiddleware(sigStore))
+	r.Use(tenant.Middleware) // injects tenant ID from subdomain or X-Tenant-Id header
 
 	// OIDC Discovery & JWKS.
 	r.Get("/.well-known/openid-configuration", provider.DiscoveryHandler())
@@ -218,7 +223,6 @@ func makeThinTokenHandler(p *oauth.Provider, store *transport.SigStore) http.Han
 			return
 		}
 
-		// Store the ML-DSA-44 signature in the sidecar for later verification.
 		store.Put(result.PQCRef, result.PQCSig)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -266,10 +270,8 @@ func makeCWTTokenHandler(p *oauth.Provider, store *transport.SigStore) http.Hand
 			return
 		}
 
-		// Store PQC signature in sidecar keyed by JWTID.
 		store.Put(result.JWTID, result.PQCSig)
 
-		// Return the raw CBOR bytes with the appropriate content type.
 		w.Header().Set("Content-Type", "application/cbor")
 		w.Header().Set("X-Token-Id", result.JWTID)
 		w.Header().Set("X-PQC-Ref", result.PQCRef)

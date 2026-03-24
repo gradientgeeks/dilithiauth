@@ -1,11 +1,14 @@
 package oauth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
 	"time"
+
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/tenant"
 )
 
 // SigStorePutter is the interface for storing PQC signatures, satisfied by
@@ -14,11 +17,20 @@ type SigStorePutter interface {
 	Put(jti string, sig []byte)
 }
 
+// UserAuthenticator is an optional production-grade authenticator backed by
+// a hashed-password store (e.g. *userstore.PostgresUserStore).
+// When set on AuthzHandlers, it takes precedence over AuthzStore.AuthenticateUser.
+// It is satisfied by *userstore.PostgresUserStore via its AuthenticateForSubject method.
+type UserAuthenticator interface {
+	AuthenticateForSubject(ctx context.Context, tenantID, username, password string) (string, error)
+}
+
 // AuthzHandlers provides HTTP handlers for the OAuth 2.0 authorization code flow.
 type AuthzHandlers struct {
-	Provider *Provider
-	Store    AuthzStore
-	SigStore SigStorePutter
+	Provider  *Provider
+	Store     AuthzStore
+	UserStore UserAuthenticator // optional; overrides Store.AuthenticateUser when set
+	SigStore  SigStorePutter
 }
 
 var loginTmpl = template.Must(template.New("login").Parse(`<!DOCTYPE html>
@@ -40,6 +52,7 @@ var loginTmpl = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 
 // AuthorizeGET renders the login form.
 func (h *AuthzHandlers) AuthorizeGET(w http.ResponseWriter, r *http.Request) {
+	tenantID := tenant.FromContext(r.Context())
 	clientID := r.URL.Query().Get("client_id")
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	state := r.URL.Query().Get("state")
@@ -50,7 +63,7 @@ func (h *AuthzHandlers) AuthorizeGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.Store.ValidateClient(clientID, redirectURI); err != nil {
+	if _, err := h.Store.ValidateClient(tenantID, clientID, redirectURI); err != nil {
 		http.Error(w, "invalid client: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -71,6 +84,7 @@ func (h *AuthzHandlers) AuthorizePOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID := tenant.FromContext(r.Context())
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	clientID := r.FormValue("client_id")
@@ -78,13 +92,25 @@ func (h *AuthzHandlers) AuthorizePOST(w http.ResponseWriter, r *http.Request) {
 	state := r.FormValue("state")
 	scope := r.FormValue("scope")
 
-	user, err := h.Store.AuthenticateUser(username, password)
-	if err != nil {
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
-		return
+	// Authenticate via UserStore (Argon2id) if available, else fall back to demo store.
+	var subject string
+	if h.UserStore != nil {
+		sub, err := h.UserStore.AuthenticateForSubject(r.Context(), tenantID, username, password)
+		if err != nil {
+			http.Error(w, "authentication failed", http.StatusUnauthorized)
+			return
+		}
+		subject = sub
+	} else {
+		user, err := h.Store.AuthenticateUser(tenantID, username, password)
+		if err != nil {
+			http.Error(w, "authentication failed", http.StatusUnauthorized)
+			return
+		}
+		subject = user.Subject
 	}
 
-	code, err := h.Store.CreateCode(user.Subject, clientID, redirectURI, scope)
+	code, err := h.Store.CreateCode(tenantID, subject, clientID, redirectURI, scope)
 	if err != nil {
 		http.Error(w, "code generation failed", http.StatusInternalServerError)
 		return
@@ -115,11 +141,12 @@ func (h *AuthzHandlers) TokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID := tenant.FromContext(r.Context())
 	code := r.FormValue("code")
 	clientID := r.FormValue("client_id")
 	redirectURI := r.FormValue("redirect_uri")
 
-	ac, err := h.Store.RedeemCode(code, clientID, redirectURI)
+	ac, err := h.Store.RedeemCode(tenantID, code, clientID, redirectURI)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -136,7 +163,6 @@ func (h *AuthzHandlers) TokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store the PQC signature in the sidecar.
 	h.SigStore.Put(result.PQCRef, result.PQCSig)
 
 	w.Header().Set("Content-Type", "application/json")

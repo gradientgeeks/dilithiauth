@@ -11,9 +11,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisAuthzStore implements AuthzStore using Redis as the backend.
-// It shares users and clients in memory for demonstration purposes,
-// but distributes authorization codes through Redis.
+// RedisAuthzStore implements AuthzStore using Redis for authorization codes
+// and the embedded MemoryAuthzStore for users and clients.
+// Redis keys are scoped by tenantID to provide logical isolation between tenants.
 type RedisAuthzStore struct {
 	client *redis.Client
 	ctx    context.Context
@@ -34,32 +34,28 @@ func NewRedisAuthzStore(redisAddr string) (*RedisAuthzStore, error) {
 	return &RedisAuthzStore{
 		client: rdb,
 		ctx:    ctx,
-		mem:    NewAuthzStore(), // Fallback to memory store for demo users and clients
+		mem:    NewAuthzStore(),
 	}, nil
 }
 
-// AddUser registers a demo user (in memory for demo).
-func (s *RedisAuthzStore) AddUser(u *DemoUser) {
-	s.mem.AddUser(u)
+func (s *RedisAuthzStore) AddUser(tenantID string, u *User) {
+	s.mem.AddUser(tenantID, u)
 }
 
-// AddClient registers a demo client (in memory for demo).
-func (s *RedisAuthzStore) AddClient(c *DemoClient) {
-	s.mem.AddClient(c)
+func (s *RedisAuthzStore) AddClient(tenantID string, c *OAuthClient) {
+	s.mem.AddClient(tenantID, c)
 }
 
-// AuthenticateUser checks username/password.
-func (s *RedisAuthzStore) AuthenticateUser(username, password string) (*DemoUser, error) {
-	return s.mem.AuthenticateUser(username, password)
+func (s *RedisAuthzStore) AuthenticateUser(tenantID, username, password string) (*User, error) {
+	return s.mem.AuthenticateUser(tenantID, username, password)
 }
 
-// ValidateClient checks that the client_id exists and the redirect_uri matches.
-func (s *RedisAuthzStore) ValidateClient(clientID, redirectURI string) (*DemoClient, error) {
-	return s.mem.ValidateClient(clientID, redirectURI)
+func (s *RedisAuthzStore) ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error) {
+	return s.mem.ValidateClient(tenantID, clientID, redirectURI)
 }
 
-// CreateCode generates and stores an authorization code in Redis.
-func (s *RedisAuthzStore) CreateCode(subject, clientID, redirectURI, scope string) (string, error) {
+// CreateCode generates and stores an authorization code in Redis, scoped by tenantID.
+func (s *RedisAuthzStore) CreateCode(tenantID, subject, clientID, redirectURI, scope string) (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -74,7 +70,6 @@ func (s *RedisAuthzStore) CreateCode(subject, clientID, redirectURI, scope strin
 		RedirectURI: redirectURI,
 		Scope:       scope,
 		ExpiresAt:   expiresAt,
-		Used:        false,
 	}
 
 	data, err := json.Marshal(ac)
@@ -82,35 +77,30 @@ func (s *RedisAuthzStore) CreateCode(subject, clientID, redirectURI, scope strin
 		return "", err
 	}
 
-	// Store in Redis with TTL
-	key := "authcode:" + code
+	key := "tenant:" + tenantID + ":authcode:" + code
 	if err := s.client.Set(s.ctx, key, data, 10*time.Minute).Err(); err != nil {
 		return "", err
 	}
-
 	return code, nil
 }
 
-// RedeemCode validates and consumes an authorization code from Redis.
-func (s *RedisAuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthCode, error) {
-	key := "authcode:" + code
+// RedeemCode validates and atomically consumes an authorization code from Redis.
+func (s *RedisAuthzStore) RedeemCode(tenantID, code, clientID, redirectURI string) (*AuthCode, error) {
+	key := "tenant:" + tenantID + ":authcode:" + code
 
-	// Start a transaction to ensure single-use
 	txf := func(tx *redis.Tx) error {
-		// Get the current code
 		res, err := tx.Get(s.ctx, key).Result()
-		if err != nil && err != redis.Nil {
-			return err
-		}
 		if err == redis.Nil {
 			return errors.New("invalid code")
+		}
+		if err != nil {
+			return err
 		}
 
 		var ac AuthCode
 		if err := json.Unmarshal([]byte(res), &ac); err != nil {
 			return err
 		}
-
 		if ac.Used {
 			return errors.New("code already used")
 		}
@@ -124,14 +114,11 @@ func (s *RedisAuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthC
 			return errors.New("redirect_uri mismatch")
 		}
 
-		// Mark as used
 		ac.Used = true
 		newData, err := json.Marshal(ac)
 		if err != nil {
 			return err
 		}
-
-		// Save back within transaction
 		_, err = tx.TxPipelined(s.ctx, func(pipe redis.Pipeliner) error {
 			pipe.Set(s.ctx, key, newData, time.Until(ac.ExpiresAt))
 			return nil
@@ -139,18 +126,10 @@ func (s *RedisAuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthC
 		return err
 	}
 
-	// Watch the key for changes
-	err := s.client.Watch(s.ctx, txf, key)
-	if err != nil {
-		if err.Error() == "invalid code" || err.Error() == "code already used" ||
-			err.Error() == "code expired" || err.Error() == "client_id mismatch" ||
-			err.Error() == "redirect_uri mismatch" {
-			return nil, err
-		}
-		return nil, errors.New("failed to redeem code or code already redeemed")
+	if err := s.client.Watch(s.ctx, txf, key); err != nil {
+		return nil, err
 	}
 
-	// Fetch again to return (it was just marked as used)
 	res, err := s.client.Get(s.ctx, key).Result()
 	if err != nil {
 		return nil, err
@@ -159,6 +138,5 @@ func (s *RedisAuthzStore) RedeemCode(code, clientID, redirectURI string) (*AuthC
 	if err := json.Unmarshal([]byte(res), &ac); err != nil {
 		return nil, err
 	}
-
 	return &ac, nil
 }
