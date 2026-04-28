@@ -2,36 +2,58 @@ package oauth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
+// bcryptDummyHash is used for constant-time comparisons when a user is not
+// found, preventing timing-based user enumeration.
+var bcryptDummyHash []byte
+
+func init() {
+	var err error
+	bcryptDummyHash, err = bcrypt.GenerateFromPassword([]byte("_dummy_dilithiauth_"), bcrypt.DefaultCost)
+	if err != nil {
+		panic("oauth: initializing bcrypt dummy hash: " + err.Error())
+	}
+}
+
 // User represents an identity stored in the demo in-memory AuthzStore.
+// Password is stored as a bcrypt hash; callers always provide plaintext.
 // Production deployments should use pkg/userstore.PostgresUserStore instead.
 type User struct {
 	Username string
-	Password string // plaintext — demo only; see pkg/userstore for Argon2id
+	Email    string
+	Password string // bcrypt hash — AddUser hashes the plaintext on entry
 	Subject  string
 }
 
 // OAuthClient represents a registered OAuth 2.0 client application.
 type OAuthClient struct {
-	ClientID    string
-	RedirectURI string
-	Name        string
+	ClientID         string
+	ClientSecretHash string // bcrypt hash; "" = public PKCE-only client
+	RedirectURI      string
+	Name             string
+	DeveloperID      string // owner developer account ID (empty for demo/seed clients)
 }
 
 // AuthCode represents an issued, single-use authorization code.
 type AuthCode struct {
-	Code        string    `json:"code"`
-	Subject     string    `json:"subject"`
-	ClientID    string    `json:"client_id"`
-	RedirectURI string    `json:"redirect_uri"`
-	Scope       string    `json:"scope"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	Used        bool      `json:"used"`
+	Code                string    `json:"code"`
+	Subject             string    `json:"subject"`
+	ClientID            string    `json:"client_id"`
+	RedirectURI         string    `json:"redirect_uri"`
+	Scope               string    `json:"scope"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	Used                bool      `json:"used"`
+	CodeChallenge       string    `json:"code_challenge,omitempty"`        // PKCE S256 challenge
+	CodeChallengeMethod string    `json:"code_challenge_method,omitempty"` // always "S256" when set
 }
 
 // AuthzStore manages OAuth clients and authorization codes, scoped per tenant.
@@ -42,8 +64,18 @@ type AuthzStore interface {
 	AddClient(tenantID string, c *OAuthClient)
 	AuthenticateUser(tenantID, username, password string) (*User, error)
 	ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error)
-	CreateCode(tenantID, subject, clientID, redirectURI, scope string) (string, error)
-	RedeemCode(tenantID, code, clientID, redirectURI string) (*AuthCode, error)
+	// CreateCode creates an authorization code. codeChallenge and codeChallengeMethod
+	// are optional PKCE parameters; pass empty strings to skip PKCE binding.
+	CreateCode(tenantID, subject, clientID, redirectURI, scope, codeChallenge, codeChallengeMethod string) (string, error)
+	// RedeemCode validates and consumes an authorization code. codeVerifier is the
+	// PKCE verifier; pass an empty string when PKCE was not used.
+	RedeemCode(tenantID, code, clientID, redirectURI, codeVerifier string) (*AuthCode, error)
+	// ValidateClientWithSecret authenticates a confidential client. For public
+	// clients (ClientSecretHash == ""), clientSecret must be empty.
+	ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI string) (*OAuthClient, error)
+	// RegisterUser creates a new user account. Returns an error if the username
+	// or email is already taken.
+	RegisterUser(tenantID string, u *User) error
 }
 
 // MemoryAuthzStore is a fully in-memory, multi-tenant AuthzStore.
@@ -66,12 +98,44 @@ func NewAuthzStore() *MemoryAuthzStore {
 }
 
 func (s *MemoryAuthzStore) AddUser(tenantID string, u *User) {
+	// Hash the password before acquiring the lock (bcrypt is expensive).
+	hash, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+	if err != nil {
+		panic("oauth: hashing user password: " + err.Error())
+	}
+	stored := &User{Username: u.Username, Password: string(hash), Subject: u.Subject}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.users[tenantID] == nil {
 		s.users[tenantID] = make(map[string]*User)
 	}
-	s.users[tenantID][u.Username] = u
+	s.users[tenantID][u.Username] = stored
+}
+
+// RegisterUser creates a new user. Returns an error if the username is already taken.
+func (s *MemoryAuthzStore) RegisterUser(tenantID string, u *User) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	stored := &User{Username: u.Username, Email: u.Email, Password: string(hash), Subject: u.Username}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.users[tenantID] == nil {
+		s.users[tenantID] = make(map[string]*User)
+	}
+	for _, existing := range s.users[tenantID] {
+		if existing.Username == u.Username {
+			return errors.New("username already taken")
+		}
+		if u.Email != "" && existing.Email == u.Email {
+			return errors.New("email already registered")
+		}
+	}
+	s.users[tenantID][u.Username] = stored
+	return nil
 }
 
 func (s *MemoryAuthzStore) AddClient(tenantID string, c *OAuthClient) {
@@ -86,12 +150,19 @@ func (s *MemoryAuthzStore) AddClient(tenantID string, c *OAuthClient) {
 func (s *MemoryAuthzStore) AuthenticateUser(tenantID, username, password string) (*User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	tenant := s.users[tenantID]
 	if tenant == nil {
+		// Dummy compare prevents timing oracle on tenant/user existence.
+		_ = bcrypt.CompareHashAndPassword(bcryptDummyHash, []byte(password))
 		return nil, errors.New("invalid credentials")
 	}
 	u, ok := tenant[username]
-	if !ok || u.Password != password {
+	if !ok {
+		_ = bcrypt.CompareHashAndPassword(bcryptDummyHash, []byte(password))
+		return nil, errors.New("invalid credentials")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password)); err != nil {
 		return nil, errors.New("invalid credentials")
 	}
 	return u, nil
@@ -114,7 +185,34 @@ func (s *MemoryAuthzStore) ValidateClient(tenantID, clientID, redirectURI string
 	return c, nil
 }
 
-func (s *MemoryAuthzStore) CreateCode(tenantID, subject, clientID, redirectURI, scope string) (string, error) {
+func (s *MemoryAuthzStore) ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI string) (*OAuthClient, error) {
+	client, err := s.ValidateClient(tenantID, clientID, redirectURI)
+	if err != nil {
+		// Dummy compare prevents timing oracle on client existence.
+		_ = bcrypt.CompareHashAndPassword(bcryptDummyHash, []byte(clientSecret))
+		return nil, err
+	}
+	if client.ClientSecretHash == "" {
+		// Public client (PKCE-only): no secret expected.
+		if clientSecret != "" {
+			return nil, errors.New("public client does not accept client_secret")
+		}
+		return client, nil
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(clientSecret)); err != nil {
+		return nil, errors.New("invalid client_secret")
+	}
+	return client, nil
+}
+
+func (s *MemoryAuthzStore) CreateCode(tenantID, subject, clientID, redirectURI, scope, codeChallenge, codeChallengeMethod string) (string, error) {
+	if codeChallenge != "" && codeChallengeMethod == "" {
+		codeChallengeMethod = "S256"
+	}
+	if codeChallenge != "" && codeChallengeMethod != "S256" {
+		return "", errors.New("pkce: only S256 code_challenge_method is supported")
+	}
+
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -124,18 +222,19 @@ func (s *MemoryAuthzStore) CreateCode(tenantID, subject, clientID, redirectURI, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.codes[code] = &AuthCode{
-		Code:        code,
-		Subject:     subject,
-		ClientID:    clientID,
-		RedirectURI: redirectURI,
-		Scope:       scope,
-		ExpiresAt:   time.Now().Add(10 * time.Minute),
-		Used:        false,
+		Code:                code,
+		Subject:             subject,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		Scope:               scope,
+		ExpiresAt:           time.Now().Add(10 * time.Minute),
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
 	}
 	return code, nil
 }
 
-func (s *MemoryAuthzStore) RedeemCode(tenantID, code, clientID, redirectURI string) (*AuthCode, error) {
+func (s *MemoryAuthzStore) RedeemCode(tenantID, code, clientID, redirectURI, codeVerifier string) (*AuthCode, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ac, ok := s.codes[code]
@@ -153,6 +252,16 @@ func (s *MemoryAuthzStore) RedeemCode(tenantID, code, clientID, redirectURI stri
 	}
 	if ac.RedirectURI != redirectURI {
 		return nil, errors.New("redirect_uri mismatch")
+	}
+	if ac.CodeChallenge != "" {
+		if codeVerifier == "" {
+			return nil, errors.New("pkce: code_verifier required")
+		}
+		h := sha256.Sum256([]byte(codeVerifier))
+		computed := base64.RawURLEncoding.EncodeToString(h[:])
+		if subtle.ConstantTimeCompare([]byte(computed), []byte(ac.CodeChallenge)) != 1 {
+			return nil, errors.New("pkce: code_verifier mismatch")
+		}
 	}
 	ac.Used = true
 	return ac, nil

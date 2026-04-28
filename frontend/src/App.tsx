@@ -1,0 +1,38 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './AuthContext'
+import Landing from './pages/Landing'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Dashboard from './pages/Dashboard'
+import NewApp from './pages/NewApp'
+import AppDetail from './pages/AppDetail'
+
+function RequireAuth({ children }: { children: React.ReactElement }) {
+  const { developer, loading } = useAuth()
+  if (loading) return <div style={{ padding: '2rem' }}>Loading…</div>
+  return developer ? children : <Navigate to="/login" replace />
+}
+
+function RequireGuest({ children }: { children: React.ReactElement }) {
+  const { developer, loading } = useAuth()
+  if (loading) return <div style={{ padding: '2rem' }}>Loading…</div>
+  return developer ? <Navigate to="/apps" replace /> : children
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter basename="/developer">
+        <Routes>
+          <Route path="/" element={<RequireGuest><Landing /></RequireGuest>} />
+          <Route path="/login" element={<RequireGuest><Login /></RequireGuest>} />
+          <Route path="/register" element={<RequireGuest><Register /></RequireGuest>} />
+          <Route path="/apps" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/apps/new" element={<RequireAuth><NewApp /></RequireAuth>} />
+          <Route path="/apps/:id" element={<RequireAuth><AppDetail /></RequireAuth>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}

@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dilithiauth
+      POSTGRES_USER: dilithiauth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dilithiauth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      DILITHIAUTH_ISSUER: ${DILITHIAUTH_ISSUER}
+      DILITHIAUTH_ADDR: :8080
+      DILITHIAUTH_POSTGRES_DSN: postgres://dilithiauth:${POSTGRES_PASSWORD}@postgres:5432/dilithiauth?sslmode=disable
+      DILITHIAUTH_REDIS_ADDR: redis:6379
+      DILITHIAUTH_SIGSTORE: redis
+      DILITHIAUTH_AUTHZSTORE: redis
+      DILITHIAUTH_KEYSTORE: file
+      DILITHIAUTH_KEYS_DIR: /data/keys
+      DILITHIAUTH_SESSION_SECRET: ${DILITHIAUTH_SESSION_SECRET}
+      DILITHIAUTH_ADMIN_TOKEN: ${DILITHIAUTH_ADMIN_TOKEN}
+    volumes:
+      - keys_data:/data/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployments/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployments/certs:/etc/ssl/dilithiauth:ro
+    depends_on:
+      - server
+
+volumes:
+  postgres_data:
+  redis_data:
+  keys_data:

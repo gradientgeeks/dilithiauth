@@ -29,11 +29,17 @@ type VerifiedClaims struct {
 	TokenID   string    `json:"jti"`
 }
 
+// RevocationChecker allows the verifier to check if a token has been revoked.
+type RevocationChecker interface {
+	IsRevoked(jti string) bool
+}
+
 // Verifier handles verification of DilithiAuth tokens.
 type Verifier struct {
 	KeyManager *signer.KeyManager
 	KeyPair    *signer.HybridKeyPair
 	SigStore   *transport.SigStore
+	Revocation RevocationChecker // optional; nil skips revocation checking
 }
 
 // NewVerifier creates a Verifier with a KeyManager and SigStore.
@@ -115,6 +121,10 @@ func (v *Verifier) VerifyJWTThin(tokenStr string) (*VerifiedClaims, error) {
 		return nil, errors.New("verifier: ML-DSA-44 verification failed")
 	}
 
+	if v.Revocation != nil && v.Revocation.IsRevoked(claims.ID) {
+		return nil, errors.New("verifier: token has been revoked")
+	}
+
 	return v.claimsFromRegistered(&claims.RegisteredClaims), nil
 }
 
@@ -155,6 +165,10 @@ func (v *Verifier) VerifyJWTFull(tokenStr string) (*VerifiedClaims, error) {
 	hybridSig := &signer.HybridSignature{MLDSASig: pqcSig}
 	if !kp.VerifyMLDSA(payloadBytes, hybridSig) {
 		return nil, errors.New("verifier: ML-DSA-44 verification failed")
+	}
+
+	if v.Revocation != nil && v.Revocation.IsRevoked(claims.ID) {
+		return nil, errors.New("verifier: token has been revoked")
 	}
 
 	return v.claimsFromRegistered(&claims.RegisteredClaims), nil
@@ -233,6 +247,10 @@ func (v *Verifier) VerifyCWT(token []byte) (*VerifiedClaims, error) {
 	hybridSig := &signer.HybridSignature{MLDSASig: pqcSig}
 	if !kp.VerifyMLDSA(baseBytes, hybridSig) {
 		return nil, errors.New("verifier: ML-DSA-44 CWT verification failed")
+	}
+
+	if v.Revocation != nil && v.Revocation.IsRevoked(claims.JWTID) {
+		return nil, errors.New("verifier: token has been revoked")
 	}
 
 	return &VerifiedClaims{

@@ -10,36 +10,50 @@
 //   - Token verification middleware for protected endpoints
 //   - Key rotation with persistence
 //   - MaxHeaderBytes tuned to 16 KiB for PQC-sized tokens
+//   - Developer portal React SPA at /developer (REST API at /api/v1/developer)
 //
 // Configuration is read from environment variables:
 //
-//	DILITHIAUTH_ISSUER         – base URL of the issuer (default: https://auth.dilithiauth.io)
-//	DILITHIAUTH_ADDR           – listen address (default: :8080)
-//	DILITHIAUTH_SIGSTORE       – SigStore backend: "memory", "file", "postgres", or "redis" (default: memory)
-//	DILITHIAUTH_SIGSTORE_PATH  – file path for file-backed SigStore (default: ./data/sigstore.json)
-//	DILITHIAUTH_POSTGRES_DSN   – PostgreSQL DSN (default: postgres://localhost:5432/dilithiauth?sslmode=disable)
-//	DILITHIAUTH_REDIS_ADDR     – Redis address (default: localhost:6379)
-//	DILITHIAUTH_KEYS_DIR       – directory for persistent keys (default: empty = ephemeral)
-//	DILITHIAUTH_KEYSTORE       – key store backend: "file" or "redis" (default: file)
-//	DILITHIAUTH_AUTHZSTORE     – auth code store backend: "memory" or "redis" (default: memory)
+//	DILITHIAUTH_ISSUER          – base URL of the issuer (default: https://auth.dilithiauth.io)
+//	DILITHIAUTH_ADDR            – listen address (default: :8080)
+//	DILITHIAUTH_SIGSTORE        – SigStore backend: "memory", "file", "postgres", or "redis" (default: memory)
+//	DILITHIAUTH_SIGSTORE_PATH   – file path for file-backed SigStore (default: ./data/sigstore.json)
+//	DILITHIAUTH_POSTGRES_DSN    – PostgreSQL DSN (default: postgres://localhost:5432/dilithiauth?sslmode=disable)
+//	DILITHIAUTH_REDIS_ADDR      – Redis address (default: localhost:6379)
+//	DILITHIAUTH_KEYS_DIR        – directory for persistent keys (default: empty = ephemeral)
+//	DILITHIAUTH_KEYSTORE        – key store backend: "file" or "redis" (default: file)
+//	DILITHIAUTH_AUTHZSTORE      – auth code store backend: "memory" or "redis" (default: memory)
+//	DILITHIAUTH_SESSION_SECRET  – base64-encoded 32-byte secret for developer session JWTs (required in prod)
+//	DILITHIAUTH_STATIC_DIR      – directory of built React assets (default: ./static)
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"embed"
+	"encoding/base64"
 	"encoding/json"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"golang.org/x/crypto/bcrypt"
 
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/developer"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/oauth"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/signer"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/tenant"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/transport"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/verifier"
 )
+
+//go:embed static
+var staticFiles embed.FS
 
 func main() {
 	issuer := getEnv("DILITHIAUTH_ISSUER", "https://auth.dilithiauth.io")
@@ -140,19 +154,99 @@ func main() {
 		log.Print("AuthzStore: in-memory")
 	}
 
-	// Seed demo users and client under the default tenant.
+	// --- Revocation store setup ---
+	revStore := oauth.NewMemoryRevocationStore()
+	// Purge expired entries once per hour.
+	go func() {
+		for range time.Tick(time.Hour) {
+			revStore.Purge()
+		}
+	}()
+
+	// Wire revocation into the verifier.
+	v.Revocation = revStore
+
+	// --- Admin token setup ---
+	adminToken := getEnv("DILITHIAUTH_ADMIN_TOKEN", "")
+	if adminToken == "" {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			log.Fatalf("FATAL: generating admin token: %v", err)
+		}
+		adminToken = base64.RawURLEncoding.EncodeToString(b)
+		log.Printf("WARNING: DILITHIAUTH_ADMIN_TOKEN not set – ephemeral token: %s", adminToken)
+	}
+
+	// --- Developer portal setup ---
+	postgresDSN := getEnv("DILITHIAUTH_POSTGRES_DSN", "postgres://localhost:5432/dilithiauth?sslmode=disable")
+
+	sessionSecretRaw := getEnv("DILITHIAUTH_SESSION_SECRET", "")
+	var sessionSecret []byte
+	if sessionSecretRaw != "" {
+		var err error
+		sessionSecret, err = base64.StdEncoding.DecodeString(sessionSecretRaw)
+		if err != nil || len(sessionSecret) < 32 {
+			log.Fatalf("FATAL: DILITHIAUTH_SESSION_SECRET must be base64-encoded 32+ bytes")
+		}
+	} else {
+		sessionSecret = make([]byte, 32)
+		if _, err := rand.Read(sessionSecret); err != nil {
+			log.Fatalf("FATAL: generating session secret: %v", err)
+		}
+		log.Printf("WARNING: DILITHIAUTH_SESSION_SECRET not set – ephemeral session secret generated")
+	}
+
+	// Developer store and postgres authz are optional — graceful degradation when
+	// DILITHIAUTH_POSTGRES_DSN is not set (local testing without PostgreSQL).
+	var devStore *developer.Store
+	var pgAuthz *oauth.PostgresAuthzStore
+	if postgresDSN != "" {
+		var storeErr error
+		devStore, storeErr = developer.NewStore(postgresDSN)
+		if storeErr != nil {
+			log.Printf("WARNING: developer store unavailable (%v) — /developer portal disabled", storeErr)
+		}
+		pgAuthz, storeErr = oauth.NewPostgresAuthzStore(postgresDSN)
+		if storeErr != nil {
+			log.Printf("WARNING: postgres authz store unavailable (%v) — client auth uses in-memory store", storeErr)
+		}
+	} else {
+		log.Print("INFO: DILITHIAUTH_POSTGRES_DSN not set — developer portal and postgres client auth disabled")
+	}
+
+	// Seed demo users and a local-test client under the default tenant.
 	authzStore.AddUser(tenant.DefaultTenantID, &oauth.User{Username: "alice", Password: "password", Subject: "alice"})
 	authzStore.AddUser(tenant.DefaultTenantID, &oauth.User{Username: "bob", Password: "password", Subject: "bob"})
-	authzStore.AddClient(tenant.DefaultTenantID, &oauth.OAuthClient{
-		ClientID:    "demo-client",
-		RedirectURI: "http://localhost:8080/callback",
-		Name:        "Demo Client",
-	})
-	authzHandlers := &oauth.AuthzHandlers{
-		Provider: provider,
-		Store:    authzStore,
-		SigStore: sigStore,
+	localRedirectURI := getEnv("DILITHIAUTH_LOCAL_REDIRECT_URI", "http://localhost:8080/api/auth/dilithiauth/callback")
+	localClientSecret := getEnv("DILITHIAUTH_LOCAL_CLIENT_SECRET", "rootaccess-local-dev-secret")
+	localSecretHash, err := bcrypt.GenerateFromPassword([]byte(localClientSecret), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("FATAL: hashing local client secret: %v", err)
 	}
+	authzStore.AddClient(tenant.DefaultTenantID, &oauth.OAuthClient{
+		ClientID:         "local-rootaccess",
+		ClientSecretHash: string(localSecretHash),
+		RedirectURI:      localRedirectURI,
+		Name:             "RootAccess Local",
+	})
+	log.Printf("Local OAuth client ready: client_id=local-rootaccess secret=%s redirect=%s", localClientSecret, localRedirectURI)
+
+	authzHandlers := &oauth.AuthzHandlers{
+		Provider:   provider,
+		Store:      authzStore,
+		SigStore:   sigStore,
+		Revocation: revStore,
+	}
+	if pgAuthz != nil {
+		authzHandlers.ClientValidator = pgAuthz
+	}
+
+	// --- Static assets for React SPA ---
+	staticSub, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		log.Fatalf("FATAL: embedding static files: %v", err)
+	}
+	staticFS := http.FileServer(http.FS(staticSub))
 
 	// Build the router.
 	r := chi.NewRouter()
@@ -160,34 +254,77 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(transport.JumboHeaderMiddleware)
 	r.Use(transport.SigStoreMiddleware(sigStore))
-	r.Use(tenant.Middleware) // injects tenant ID from subdomain or X-Tenant-Id header
 
-	// OIDC Discovery & JWKS.
-	r.Get("/.well-known/openid-configuration", provider.DiscoveryHandler())
-	r.Get("/.well-known/jwks.json", provider.JWKSHandler())
-
-	// Token issuance endpoints (demo – no auth guard for brevity).
-	r.Post("/token/thin", makeThinTokenHandler(provider, sigStore))
-	r.Post("/token/full", makeFullTokenHandler(provider))
-	r.Post("/token/cwt", makeCWTTokenHandler(provider, sigStore))
-
-	// OAuth 2.0 Authorization Code flow.
-	r.Get("/authorize", authzHandlers.AuthorizeGET)
-	r.Post("/authorize", authzHandlers.AuthorizePOST)
-	r.Post("/token", authzHandlers.TokenExchange)
-
-	// Key rotation admin endpoint.
-	if km != nil {
-		r.Post("/admin/rotate", makeRotateHandler(km))
+	// Developer portal — only mounted when PostgreSQL is available.
+	if devStore != nil {
+		devHandlers := &developer.Handlers{
+			Store:         devStore,
+			SessionSecret: sessionSecret,
+		}
+		r.Mount("/api/v1/developer", devHandlers.Router())
+		r.Get("/developer", http.RedirectHandler("/developer/", http.StatusMovedPermanently).ServeHTTP)
+		r.Get("/developer/*", func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/developer")
+			if path == "" || path == "/" {
+				path = "/index.html"
+			}
+			r.URL.Path = path
+			if _, err := staticSub.(interface {
+				Open(string) (fs.File, error)
+			}).Open(strings.TrimPrefix(path, "/")); err != nil {
+				r.URL.Path = "/index.html"
+			}
+			staticFS.ServeHTTP(w, r)
+		})
 	}
 
-	// Protected endpoints (require valid token).
+	// All OAuth and OIDC routes — apply tenant middleware.
 	r.Group(func(r chi.Router) {
-		r.Use(v.Middleware())
-		r.Get("/protected/whoami", func(w http.ResponseWriter, r *http.Request) {
-			claims := verifier.ClaimsFromContext(r.Context())
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(claims)
+		r.Use(tenant.Middleware)
+
+		// OIDC Discovery & JWKS.
+		r.Get("/.well-known/openid-configuration", provider.DiscoveryHandler())
+		r.Get("/.well-known/jwks.json", provider.JWKSHandler())
+
+		// Token issuance endpoints (demo – no auth guard for brevity).
+		r.Post("/token/thin", makeThinTokenHandler(provider, sigStore))
+		r.Post("/token/full", makeFullTokenHandler(provider))
+		r.Post("/token/cwt", makeCWTTokenHandler(provider, sigStore))
+
+		// OAuth 2.0 Authorization Code flow.
+		r.Get("/authorize", authzHandlers.AuthorizeGET)
+		r.Post("/authorize", authzHandlers.AuthorizePOST)
+		r.Get("/register", authzHandlers.RegisterGET)
+		r.Post("/register", authzHandlers.RegisterPOST)
+		r.Post("/token", authzHandlers.TokenExchange)
+
+		// Token revocation endpoint (RFC 7009).
+		r.Post("/revoke", authzHandlers.RevokeToken)
+
+		// Key rotation admin endpoint — protected by bearer admin token.
+		if km != nil {
+			r.With(requireAdminToken(adminToken)).Post("/admin/rotate", makeRotateHandler(km))
+		}
+
+		// Protected endpoints (require valid token).
+		r.Group(func(r chi.Router) {
+			r.Use(v.Middleware())
+			r.Get("/protected/whoami", func(w http.ResponseWriter, r *http.Request) {
+				claims := verifier.ClaimsFromContext(r.Context())
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(claims)
+			})
+			// OIDC userinfo endpoint — returns subject identity for OAuth clients.
+			r.Get("/userinfo", func(w http.ResponseWriter, r *http.Request) {
+				claims := verifier.ClaimsFromContext(r.Context())
+				sub := claims.Subject
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"sub":   sub,
+					"name":  sub,
+					"email": sub + "@dilithiauth.local",
+				})
+			})
 		})
 	})
 
@@ -292,6 +429,23 @@ func makeRotateHandler(km *signer.KeyManager) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"kid":    newKP.Kid,
 			"status": "rotated",
+		})
+	}
+}
+
+// requireAdminToken is middleware that enforces an Authorization: Bearer <token>
+// check using constant-time comparison to prevent timing attacks.
+func requireAdminToken(token string) func(http.Handler) http.Handler {
+	want := []byte("Bearer " + token)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got := r.Header.Get("Authorization")
+			if !strings.HasPrefix(got, "Bearer ") ||
+				subtle.ConstantTimeCompare([]byte(got), want) != 1 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

@@ -81,12 +81,12 @@ func TestAuthzStore_ValidateClient(t *testing.T) {
 func TestAuthzStore_CreateRedeemCode(t *testing.T) {
 	s := newAuthzStore()
 
-	code, err := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "openid")
+	code, err := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "openid", "", "")
 	if err != nil {
 		t.Fatalf("CreateCode() error = %v", err)
 	}
 
-	ac, err := s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback")
+	ac, err := s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback", "")
 	if err != nil {
 		t.Fatalf("RedeemCode() error = %v", err)
 	}
@@ -97,10 +97,10 @@ func TestAuthzStore_CreateRedeemCode(t *testing.T) {
 
 func TestAuthzStore_RedeemCode_AlreadyUsed(t *testing.T) {
 	s := newAuthzStore()
-	code, _ := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "")
-	s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback")
+	code, _ := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "", "", "")
+	s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback", "")
 
-	_, err := s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback")
+	_, err := s.RedeemCode(testTenant, code, "demo-client", "http://localhost:8080/callback", "")
 	if err == nil {
 		t.Error("RedeemCode() should fail on reuse")
 	}
@@ -108,9 +108,9 @@ func TestAuthzStore_RedeemCode_AlreadyUsed(t *testing.T) {
 
 func TestAuthzStore_RedeemCode_WrongClient(t *testing.T) {
 	s := newAuthzStore()
-	code, _ := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "")
+	code, _ := s.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "", "", "")
 
-	_, err := s.RedeemCode(testTenant, code, "wrong-client", "http://localhost:8080/callback")
+	_, err := s.RedeemCode(testTenant, code, "wrong-client", "http://localhost:8080/callback", "")
 	if err == nil {
 		t.Error("RedeemCode() with wrong client should fail")
 	}
@@ -118,7 +118,7 @@ func TestAuthzStore_RedeemCode_WrongClient(t *testing.T) {
 
 func TestAuthzStore_RedeemCode_InvalidCode(t *testing.T) {
 	s := newAuthzStore()
-	_, err := s.RedeemCode(testTenant, "nonexistent", "demo-client", "http://localhost:8080/callback")
+	_, err := s.RedeemCode(testTenant, "nonexistent", "demo-client", "http://localhost:8080/callback", "")
 	if err == nil {
 		t.Error("RedeemCode() with invalid code should fail")
 	}
@@ -213,15 +213,16 @@ func TestAuthorizePOST_BadCredentials(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	h.AuthorizePOST(rec, req)
 
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	// Bad credentials redirect back to the login form (303 See Other).
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
 }
 
 func TestTokenExchange_ValidCode(t *testing.T) {
 	h, _ := newHandlers(t)
 
-	code, err := h.Store.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "openid")
+	code, err := h.Store.CreateCode(testTenant, "alice-sub", "demo-client", "http://localhost:8080/callback", "openid", "", "")
 	if err != nil {
 		t.Fatalf("CreateCode() error = %v", err)
 	}
