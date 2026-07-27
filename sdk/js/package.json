@@ -1,6 +1,6 @@
 {
   "name": "dilithiauth-js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DilithiAuth Post-Quantum Identity Client SDK for JavaScript and TypeScript",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",

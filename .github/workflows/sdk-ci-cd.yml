@@ -117,7 +117,7 @@ jobs:
           cd sdk/python
           pip install build twine
           python -m build
-          twine upload dist/* -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
+          twine upload --skip-existing dist/* -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
 
   publish-nuget:
     name: Publish .NET SDK to NuGet
@@ -144,7 +144,7 @@ jobs:
       - name: Push to NuGet
         run: |
           cd sdk/dotnet/DilithiAuth.Client
-          dotnet nuget push bin/Release/*.nupkg -k "${{ steps.login.outputs.NUGET_API_KEY }}" -s https://api.nuget.org/v3/index.json
+          dotnet nuget push bin/Release/*.nupkg -k "${{ steps.login.outputs.NUGET_API_KEY }}" -s https://api.nuget.org/v3/index.json --skip-duplicate
 
   publish-go:
     name: Index Go Module on Go Proxy
