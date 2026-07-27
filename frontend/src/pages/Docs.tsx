@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   BookOpen,
   Shield,
@@ -10,7 +10,9 @@ import {
   Cpu,
   ExternalLink,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Menu,
+  X
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 
@@ -286,6 +288,35 @@ export default function Docs() {
   const [activeCodeStage, setActiveCodeStage] = useState<'pkce' | 'init' | 'exchange' | 'userinfo'>('pkce')
   const [copiedMap, setCopiedMap] = useState<Record<string, boolean>>({})
 
+  // Mobile navigation drawer state & accessibility refs
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const triggerBtnRef = useRef<HTMLButtonElement>(null)
+
+  // Lock Body Scroll when Mobile Drawer is open
+  useEffect(() => {
+    if (mobileNavOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileNavOpen])
+
+  // Escape key listener for Mobile Drawer accessibility
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileNavOpen) {
+        setMobileNavOpen(false)
+        triggerBtnRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileNavOpen])
+
   // Endpoint reference state
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointKey>('discovery')
   const [endpointTab, setEndpointTab] = useState<'body' | 'headers' | 'metrics'>('body')
@@ -545,630 +576,828 @@ export default function Docs() {
     <div>
       <Navbar />
 
-      <div className="container">
-        {/* Page Header */}
-        <div className="page-header" style={{ marginBottom: '2rem' }}>
-          <div>
-            <span className="badge badge-hybrid" style={{ marginBottom: '0.6rem' }}>
-              <Shield size={12} /> NIST FIPS 204 Standard • ML-DSA-44 & Ed25519
-            </span>
-            <h1>DilithiAuth SDK & Interactive Documentation</h1>
-            <p style={{ maxWidth: '680px' }}>
-              Post-quantum OAuth 2.0 & OIDC identity integration guides, authentic PKCE S256 flow snippets,
-              and live Post-Quantum Token strategy reference.
-            </p>
+      {/* Mobile Sub-Header & Sticky Navigation Trigger (<768px) */}
+      <div className="mobile-sub-header">
+        <button
+          ref={triggerBtnRef}
+          className="mobile-nav-toggle btn btn-outline btn-sm flex items-center gap-2"
+          onClick={() => setMobileNavOpen(!mobileNavOpen)}
+          aria-expanded={mobileNavOpen}
+          aria-controls="docs-sidebar-drawer"
+          aria-label="Toggle documentation navigation menu"
+        >
+          <Menu size={16} />
+          <span>Documentation Menu</span>
+        </button>
+        <span className="text-muted text-xs">Section: {selectedEndpoint}</span>
+      </div>
+
+      {/* Backdrop Overlay */}
+      {mobileNavOpen && (
+        <div
+          className="drawer-backdrop"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Slide-over Mobile Sidebar Drawer */}
+      <aside
+        id="docs-sidebar-drawer"
+        ref={drawerRef}
+        className={`docs-drawer ${mobileNavOpen ? 'open' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Documentation Navigation Drawer"
+      >
+        <div className="drawer-header">
+          <div className="flex items-center gap-2 font-semibold" style={{ color: 'var(--text-main)' }}>
+            <BookOpen size={18} /> Documentation
           </div>
-          <div className="flex gap-2">
+          <button
+            className="btn btn-outline btn-sm p-1"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close navigation drawer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="drawer-body">
+          <nav className="drawer-nav">
+            <div className="drawer-section-title">Quick Jump</div>
             <a
-              href="https://csrc.nist.gov/pubs/fips/204/final"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-outline btn-sm"
+              href="#quickstart"
+              onClick={() => setMobileNavOpen(false)}
+              className="drawer-nav-item"
             >
-              <ExternalLink size={14} /> FIPS 204 Spec
+              <Terminal size={15} /> 1. SDK Quickstart
+            </a>
+            <a
+              href="#code-snippets"
+              onClick={() => setMobileNavOpen(false)}
+              className="drawer-nav-item"
+            >
+              <Code size={15} /> 2. Code Snippets
+            </a>
+            <a
+              href="#api-reference"
+              onClick={() => setMobileNavOpen(false)}
+              className="drawer-nav-item"
+            >
+              <Key size={15} /> 3. API Reference
+            </a>
+            <a
+              href="#token-strategies"
+              onClick={() => setMobileNavOpen(false)}
+              className="drawer-nav-item"
+            >
+              <Cpu size={15} /> 4. PQC Token Strategies
+            </a>
+
+            <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>API Endpoints</div>
+            <a
+              href="#api-reference"
+              onClick={() => { setSelectedEndpoint('discovery'); setMobileNavOpen(false); }}
+              className={`drawer-nav-item ${selectedEndpoint === 'discovery' ? 'active' : ''}`}
+            >
+              /.well-known/openid
+            </a>
+            <a
+              href="#api-reference"
+              onClick={() => { setSelectedEndpoint('jwks'); setMobileNavOpen(false); }}
+              className={`drawer-nav-item ${selectedEndpoint === 'jwks' ? 'active' : ''}`}
+            >
+              /.well-known/jwks.json
+            </a>
+            <a
+              href="#api-reference"
+              onClick={() => { setSelectedEndpoint('authorize'); setMobileNavOpen(false); }}
+              className={`drawer-nav-item ${selectedEndpoint === 'authorize' ? 'active' : ''}`}
+            >
+              /authorize (PKCE)
+            </a>
+            <a
+              href="#api-reference"
+              onClick={() => { setSelectedEndpoint('token'); setMobileNavOpen(false); }}
+              className={`drawer-nav-item ${selectedEndpoint === 'token' ? 'active' : ''}`}
+            >
+              /token
+            </a>
+            <a
+              href="#api-reference"
+              onClick={() => { setSelectedEndpoint('userinfo'); setMobileNavOpen(false); }}
+              className={`drawer-nav-item ${selectedEndpoint === 'userinfo' ? 'active' : ''}`}
+            >
+              /userinfo
+            </a>
+            <a
+              href="#api-reference"
+              onClick={() => { setSelectedEndpoint('revoke'); setMobileNavOpen(false); }}
+              className={`drawer-nav-item ${selectedEndpoint === 'revoke' ? 'active' : ''}`}
+            >
+              /revoke
+            </a>
+          </nav>
+        </div>
+      </aside>
+
+      {/* Enterprise Documentation 3-Column Layout (R1) */}
+      <div className="docs-layout">
+        {/* Left Sticky Sidebar Navigation (Desktop/Tablet) */}
+        <aside className="docs-sidebar">
+          <div className="sidebar-nav-group">
+            <div className="sidebar-nav-title">Documentation</div>
+            <a href="#quickstart" className="sidebar-nav-link">
+              <Terminal size={15} /> SDK Quickstart
+            </a>
+            <a href="#code-snippets" className="sidebar-nav-link">
+              <Code size={15} /> Code Snippets
+            </a>
+            <a href="#api-reference" className="sidebar-nav-link">
+              <Key size={15} /> API Reference
+            </a>
+            <a href="#token-strategies" className="sidebar-nav-link">
+              <Cpu size={15} /> PQC Token Strategies
             </a>
           </div>
-        </div>
 
-        {/* Navigation Quick Jump Tabs */}
-        <div className="tab-header" style={{ marginBottom: '2rem' }}>
-          <a href="#quickstart" className="tab-btn active">
-            <Terminal size={15} /> SDK Quickstart
-          </a>
-          <a href="#code-snippets" className="tab-btn">
-            <Code size={15} /> Code Snippets
-          </a>
-          <a href="#api-reference" className="tab-btn">
-            <Key size={15} /> API Reference
-          </a>
-          <a href="#token-strategies" className="tab-btn">
-            <Cpu size={15} /> PQC Token Strategies
-          </a>
-        </div>
-
-        {/* SECTION 1: SDK Quickstart & Language Switcher */}
-        <section id="quickstart" style={{ marginBottom: '2.5rem' }}>
-          <div className="card">
-            <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
-              <div>
-                <h2>1. SDK Installation & Quickstart</h2>
-                <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                  Select your primary language stack to get copy-ready package installation commands and manifests.
-                </p>
-              </div>
-              <span className="badge badge-public">5 Languages Supported</span>
-            </div>
-
-            {/* Language Switcher Tab Bar */}
-            <div
-              style={{
-                display: 'flex',
-                gap: '0.5rem',
-                marginBottom: '1.5rem',
-                overflowX: 'auto',
-                paddingBottom: '0.4rem',
-                borderBottom: '1px solid var(--border-color)'
-              }}
+          <div className="sidebar-nav-group">
+            <div className="sidebar-nav-title">API Endpoints</div>
+            <button
+              onClick={() => setSelectedEndpoint('discovery')}
+              className={`sidebar-sub-link ${selectedEndpoint === 'discovery' ? 'active' : ''}`}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
             >
-              {(Object.keys(LANGUAGE_DATA) as Language[]).map((langKey) => {
-                const lang = LANGUAGE_DATA[langKey]
-                const isSelected = selectedLang === langKey
-                return (
-                  <button
-                    key={langKey}
-                    onClick={() => setSelectedLang(langKey)}
-                    className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem' }}
-                  >
-                    <span
-                      className="badge"
-                      style={{
-                        fontSize: '0.68rem',
-                        padding: '1px 5px',
-                        background: isSelected ? 'rgba(255,255,255,0.2)' : '#1f2937',
-                        color: isSelected ? 'white' : '#9ca3af'
-                      }}
-                    >
-                      {lang.badge}
-                    </span>
-                    {lang.name}
-                  </button>
-                )
-              })}
+              /.well-known/openid
+            </button>
+            <button
+              onClick={() => setSelectedEndpoint('jwks')}
+              className={`sidebar-sub-link ${selectedEndpoint === 'jwks' ? 'active' : ''}`}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              /.well-known/jwks.json
+            </button>
+            <button
+              onClick={() => setSelectedEndpoint('authorize')}
+              className={`sidebar-sub-link ${selectedEndpoint === 'authorize' ? 'active' : ''}`}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              /authorize (PKCE)
+            </button>
+            <button
+              onClick={() => setSelectedEndpoint('token')}
+              className={`sidebar-sub-link ${selectedEndpoint === 'token' ? 'active' : ''}`}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              /token
+            </button>
+            <button
+              onClick={() => setSelectedEndpoint('userinfo')}
+              className={`sidebar-sub-link ${selectedEndpoint === 'userinfo' ? 'active' : ''}`}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              /userinfo
+            </button>
+            <button
+              onClick={() => setSelectedEndpoint('revoke')}
+              className={`sidebar-sub-link ${selectedEndpoint === 'revoke' ? 'active' : ''}`}
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              /revoke
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Content Column */}
+        <main className="docs-main">
+          {/* Page Header */}
+          <div className="page-header" style={{ marginBottom: '2rem' }}>
+            <div>
+              <span className="badge badge-hybrid" style={{ marginBottom: '0.6rem' }}>
+                <Shield size={12} /> NIST FIPS 204 Standard • ML-DSA-44 & Ed25519
+              </span>
+              <h1>DilithiAuth SDK & Interactive Documentation</h1>
+              <p style={{ maxWidth: '680px' }}>
+                Post-quantum OAuth 2.0 & OIDC identity integration guides, authentic PKCE S256 flow snippets,
+                and live Post-Quantum Token strategy reference.
+              </p>
             </div>
-
-            {/* Installation Box */}
-            <div className="detail-grid" style={{ marginBottom: '1.25rem' }}>
-              <div>
-                <div className="detail-label">CLI Package Installation</div>
-                <div
-                  style={{
-                    background: '#060911',
-                    border: '1px solid #1f2937',
-                    borderRadius: '6px',
-                    padding: '0.75rem 1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '0.5rem',
-                    marginTop: '0.3rem'
-                  }}
-                >
-                  <code style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8', fontSize: '0.85rem' }}>
-                    {langInfo.installCmd}
-                  </code>
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => copyToClipboard(`install-${langInfo.id}`, langInfo.installCmd)}
-                    style={{ flexShrink: 0 }}
-                  >
-                    {copiedMap[`install-${langInfo.id}`] ? (
-                      <>
-                        <Check size={14} color="#10b981" />
-                        <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={14} />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <div className="detail-label">Manifest File ({langInfo.manifestFile})</div>
-                <div
-                  style={{
-                    background: '#060911',
-                    border: '1px solid #1f2937',
-                    borderRadius: '6px',
-                    padding: '0.75rem 1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '0.5rem',
-                    marginTop: '0.3rem'
-                  }}
-                >
-                  <code style={{ fontFamily: 'var(--font-mono)', color: '#9ca3af', fontSize: '0.8rem', whiteSpace: 'pre' }}>
-                    {langInfo.manifestContent}
-                  </code>
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => copyToClipboard(`manifest-${langInfo.id}`, langInfo.manifestContent)}
-                    style={{ flexShrink: 0 }}
-                  >
-                    {copiedMap[`manifest-${langInfo.id}`] ? (
-                      <>
-                        <Check size={14} color="#10b981" />
-                        <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={14} />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
+            <div className="flex gap-2">
+              <a
+                href="https://csrc.nist.gov/pubs/fips/204/final"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-outline btn-sm"
+              >
+                <ExternalLink size={14} /> FIPS 204 Spec
+              </a>
             </div>
           </div>
-        </section>
 
-        {/* SECTION 2: Authentic PKCE & Auth Code Snippets */}
-        <section id="code-snippets" style={{ marginBottom: '2.5rem' }}>
-          <div className="card">
-            <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1rem' }}>
-              <div>
-                <h2>2. Code Challenge & Integration Snippets</h2>
-                <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                  Authentic PKCE S256 code challenge generation, OAuth2 authorization, token exchange, and userinfo claims for {langInfo.name}.
-                </p>
+          {/* Navigation Quick Jump Tabs (Desktop/Tablet Top Navigation Bar) */}
+          <div className="tab-header docs-top-tab-header" style={{ marginBottom: '2rem' }}>
+            <a href="#quickstart" className="tab-btn active">
+              <Terminal size={15} /> SDK Quickstart
+            </a>
+            <a href="#code-snippets" className="tab-btn">
+              <Code size={15} /> Code Snippets
+            </a>
+            <a href="#api-reference" className="tab-btn">
+              <Key size={15} /> API Reference
+            </a>
+            <a href="#token-strategies" className="tab-btn">
+              <Cpu size={15} /> PQC Token Strategies
+            </a>
+          </div>
+
+          {/* SECTION 1: SDK Quickstart & Language Switcher */}
+          <section id="quickstart" style={{ marginBottom: '2.5rem' }}>
+            <div className="card">
+              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
+                <div>
+                  <h2>1. SDK Installation & Quickstart</h2>
+                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    Select your primary language stack to get copy-ready package installation commands and manifests.
+                  </p>
+                </div>
+                <span className="badge badge-public">5 Languages Supported</span>
               </div>
-              <span className="badge badge-hybrid">
-                <Shield size={11} /> PKCE S256 Mandated
-              </span>
-            </div>
 
-            {/* Snippet Stage Sub-tabs */}
-            <div className="tab-header" style={{ marginBottom: '1rem' }}>
-              <button
-                className={`tab-btn ${activeCodeStage === 'pkce' ? 'active' : ''}`}
-                onClick={() => setActiveCodeStage('pkce')}
-              >
-                <Key size={14} /> 1. PKCE S256 Challenge
-              </button>
-              <button
-                className={`tab-btn ${activeCodeStage === 'init' ? 'active' : ''}`}
-                onClick={() => setActiveCodeStage('init')}
-              >
-                <Code size={14} /> 2. Client Init & Auth URL
-              </button>
-              <button
-                className={`tab-btn ${activeCodeStage === 'exchange' ? 'active' : ''}`}
-                onClick={() => setActiveCodeStage('exchange')}
-              >
-                <Cpu size={14} /> 3. Code Exchange & PQC Token
-              </button>
-              <button
-                className={`tab-btn ${activeCodeStage === 'userinfo' ? 'active' : ''}`}
-                onClick={() => setActiveCodeStage('userinfo')}
-              >
-                <BookOpen size={14} /> 4. UserInfo Retrieval
-              </button>
-            </div>
-
-            {/* Active Code Block */}
-            <div style={{ position: 'relative' }}>
+              {/* Language Switcher Tab Bar */}
               <div
                 style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  background: '#0b0f19',
-                  padding: '0.5rem 1rem',
-                  borderTopLeftRadius: '6px',
-                  borderTopRightRadius: '6px',
-                  border: '1px solid #1f2937',
-                  borderBottom: 'none'
+                  gap: '0.5rem',
+                  marginBottom: '1.5rem',
+                  overflowX: 'auto',
+                  paddingBottom: '0.4rem',
+                  borderBottom: '1px solid var(--border-color)'
                 }}
               >
-                <span className="mono" style={{ fontSize: '0.75rem' }}>
-                  {selectedLang.toUpperCase()} — Stage:{' '}
-                  {activeCodeStage === 'pkce'
-                    ? 'PKCE S256 Generator'
-                    : activeCodeStage === 'init'
-                    ? 'OAuth2 Initialization'
-                    : activeCodeStage === 'exchange'
-                    ? 'Token Exchange'
-                    : 'UserInfo Claims'}
-                </span>
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() =>
-                    copyToClipboard(
-                      `code-${selectedLang}-${activeCodeStage}`,
-                      activeCodeStage === 'pkce'
-                        ? langInfo.pkceCode
-                        : activeCodeStage === 'init'
-                        ? langInfo.clientInitCode
-                        : activeCodeStage === 'exchange'
-                        ? langInfo.tokenExchangeCode
-                        : langInfo.userinfoCode
-                    )
-                  }
-                >
-                  {copiedMap[`code-${selectedLang}-${activeCodeStage}`] ? (
-                    <>
-                      <Check size={14} color="#10b981" />
-                      <span style={{ color: '#10b981', fontWeight: 600 }}>Copied Code!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={14} />
-                      <span>Copy Code</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <pre
-                className="code-block"
-                style={{
-                  borderTopLeftRadius: 0,
-                  borderTopRightRadius: 0,
-                  maxHeight: '380px'
-                }}
-              >
-                {activeCodeStage === 'pkce' && langInfo.pkceCode}
-                {activeCodeStage === 'init' && langInfo.clientInitCode}
-                {activeCodeStage === 'exchange' && langInfo.tokenExchangeCode}
-                {activeCodeStage === 'userinfo' && langInfo.userinfoCode}
-              </pre>
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION 3: Interactive API & Endpoint Reference */}
-        <section id="api-reference" style={{ marginBottom: '2.5rem' }}>
-          <div className="card card-glow">
-            <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
-              <div>
-                <h2>3. Interactive API & Post-Quantum Identity Reference</h2>
-                <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                  Test endpoints, configure live parameters (Client ID, Redirect URI, Token Strategy), and inspect exact response formats.
-                </p>
-              </div>
-              <span className="badge badge-confidential">Live Interactive Playground</span>
-            </div>
-
-            <div className="detail-grid" style={{ gridTemplateColumns: '260px 1fr', gap: '1.25rem' }}>
-              {/* Endpoint List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <div className="detail-label" style={{ marginBottom: '0.4rem' }}>DilithiAuth Endpoints</div>
-
-                <button
-                  onClick={() => setSelectedEndpoint('discovery')}
-                  className={`btn ${selectedEndpoint === 'discovery' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                >
-                  <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/.well-known/openid-configuration</span>
-                </button>
-
-                <button
-                  onClick={() => setSelectedEndpoint('jwks')}
-                  className={`btn ${selectedEndpoint === 'jwks' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                >
-                  <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/.well-known/jwks.json</span>
-                </button>
-
-                <button
-                  onClick={() => setSelectedEndpoint('authorize')}
-                  className={`btn ${selectedEndpoint === 'authorize' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                >
-                  <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                  <span>/authorize (PKCE)</span>
-                </button>
-
-                <button
-                  onClick={() => setSelectedEndpoint('token')}
-                  className={`btn ${selectedEndpoint === 'token' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                >
-                  <span className="badge badge-confidential" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>POST</span>
-                  <span>/token</span>
-                </button>
-
-                <button
-                  onClick={() => setSelectedEndpoint('userinfo')}
-                  className={`btn ${selectedEndpoint === 'userinfo' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                >
-                  <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                  <span>/userinfo</span>
-                </button>
-
-                <button
-                  onClick={() => setSelectedEndpoint('revoke')}
-                  className={`btn ${selectedEndpoint === 'revoke' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                >
-                  <span className="badge badge-confidential" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>POST</span>
-                  <span>/revoke</span>
-                </button>
-              </div>
-
-              {/* Endpoint Tester & Inspector */}
-              <div>
-                {/* Interactive Controls Header */}
-                <div
-                  style={{
-                    background: '#0b0f19',
-                    border: '1px solid #1f2937',
-                    borderRadius: '6px',
-                    padding: '0.85rem',
-                    marginBottom: '1rem'
-                  }}
-                >
-                  <div className="detail-label" style={{ marginBottom: '0.6rem' }}>Interactive Parameter Inputs</div>
-                  <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div>
-                      <label className="label">Client ID</label>
-                      <input
-                        type="text"
-                        value={clientId}
-                        onChange={(e) => setClientId(e.target.value)}
-                        placeholder="Client ID"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Redirect URI</label>
-                      <input
-                        type="text"
-                        value={redirectUri}
-                        onChange={(e) => setRedirectUri(e.target.value)}
-                        placeholder="Redirect URI"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">User Subject (sub)</label>
-                      <input
-                        type="text"
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        placeholder="Subject email/ID"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Token Strategy</label>
-                      <select
-                        value={tokenStrategy}
-                        onChange={(e) => setTokenStrategy(e.target.value as TokenStrategy)}
+                {(Object.keys(LANGUAGE_DATA) as Language[]).map((langKey) => {
+                  const lang = LANGUAGE_DATA[langKey]
+                  const isSelected = selectedLang === langKey
+                  return (
+                    <button
+                      key={langKey}
+                      onClick={() => setSelectedLang(langKey)}
+                      className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                      style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem' }}
+                    >
+                      <span
+                        className="badge"
+                        style={{
+                          fontSize: '0.68rem',
+                          padding: '1px 5px',
+                          background: isSelected ? 'rgba(255,255,255,0.2)' : '#1f2937',
+                          color: isSelected ? 'white' : '#9ca3af'
+                        }}
                       >
-                        <option value="thin">Thin Token (Ed25519 + pqc_ref)</option>
-                        <option value="full">Jumbo Token (Embedded ML-DSA-44)</option>
-                        <option value="cwt">CBOR Web Token (CWT RFC 8392)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Response Preview Header */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderBottom: '1px solid #1f2937',
-                    paddingBottom: '0.5rem',
-                    marginBottom: '0.75rem'
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`badge ${
-                        endpointRes.method === 'GET' ? 'badge-public' : 'badge-confidential'
-                      }`}
-                    >
-                      {endpointRes.method}
-                    </span>
-                    <span className="mono" style={{ fontSize: '0.85rem', color: '#f9fafb' }}>
-                      {endpointRes.url}
-                    </span>
-                    <span
-                      className="badge"
-                      style={{
-                        background: 'rgba(5, 150, 105, 0.15)',
-                        color: '#6ee7b7',
-                        border: '1px solid rgba(5, 150, 105, 0.3)'
-                      }}
-                    >
-                      {endpointRes.status} {endpointRes.statusText}
-                    </span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      className={`btn btn-sm ${endpointTab === 'body' ? 'btn-primary' : 'btn-outline'}`}
-                      onClick={() => setEndpointTab('body')}
-                    >
-                      Body
+                        {lang.badge}
+                      </span>
+                      {lang.name}
                     </button>
-                    <button
-                      className={`btn btn-sm ${endpointTab === 'headers' ? 'btn-primary' : 'btn-outline'}`}
-                      onClick={() => setEndpointTab('headers')}
-                    >
-                      Headers
-                    </button>
-                    <button
-                      className={`btn btn-sm ${endpointTab === 'metrics' ? 'btn-primary' : 'btn-outline'}`}
-                      onClick={() => setEndpointTab('metrics')}
-                    >
-                      PQC Metrics
-                    </button>
-                  </div>
-                </div>
+                  )
+                })}
+              </div>
 
-                {/* Inspector Output Panel */}
-                {endpointTab === 'body' && (
-                  <div style={{ position: 'relative' }}>
+              {/* Installation & Manifest Command Boxes (R2 Protected Wrapper) */}
+              <div className="detail-grid" style={{ marginBottom: '1.25rem' }}>
+                <div>
+                  <div className="detail-label">CLI Package Installation</div>
+                  <div className="cmd-box">
+                    <code>{langInfo.installCmd}</code>
                     <button
                       className="btn btn-outline btn-sm"
-                      onClick={() =>
-                        copyToClipboard(`res-body-${selectedEndpoint}-${tokenStrategy}`, JSON.stringify(endpointRes.body, null, 2))
-                      }
-                      style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', zIndex: 10 }}
+                      onClick={() => copyToClipboard(`install-${langInfo.id}`, langInfo.installCmd)}
+                      style={{ flexShrink: 0 }}
                     >
-                      {copiedMap[`res-body-${selectedEndpoint}-${tokenStrategy}`] ? (
+                      {copiedMap[`install-${langInfo.id}`] ? (
                         <>
-                          <Check size={13} color="#10b981" />
-                          <span style={{ color: '#10b981' }}>Copied</span>
+                          <Check size={14} color="#10b981" />
+                          <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
                         </>
                       ) : (
                         <>
-                          <Copy size={13} />
-                          <span>Copy Response</span>
+                          <Copy size={14} />
+                          <span>Copy</span>
                         </>
                       )}
                     </button>
-                    <pre className="code-block" style={{ maxHeight: '340px' }}>
-                      {JSON.stringify(endpointRes.body, null, 2)}
-                    </pre>
                   </div>
-                )}
+                </div>
 
-                {endpointTab === 'headers' && (
-                  <pre className="code-block" style={{ maxHeight: '340px' }}>
-                    {Object.entries(endpointRes.headers)
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join('\n')}
-                  </pre>
-                )}
+                <div>
+                  <div className="detail-label">Manifest File ({langInfo.manifestFile})</div>
+                  <div className="cmd-box">
+                    <code style={{ color: '#9ca3af', whiteSpace: 'pre' }}>
+                      {langInfo.manifestContent}
+                    </code>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => copyToClipboard(`manifest-${langInfo.id}`, langInfo.manifestContent)}
+                      style={{ flexShrink: 0 }}
+                    >
+                      {copiedMap[`manifest-${langInfo.id}`] ? (
+                        <>
+                          <Check size={14} color="#10b981" />
+                          <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
 
-                {endpointTab === 'metrics' && (
+          {/* SECTION 2: Authentic PKCE & Auth Code Snippets */}
+          <section id="code-snippets" style={{ marginBottom: '2.5rem' }}>
+            <div className="card">
+              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1rem' }}>
+                <div>
+                  <h2>2. Code Challenge & Integration Snippets</h2>
+                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    Authentic PKCE S256 code challenge generation, OAuth2 authorization, token exchange, and userinfo claims for {langInfo.name}.
+                  </p>
+                </div>
+                <span className="badge badge-hybrid">
+                  <Shield size={11} /> PKCE S256 Mandated
+                </span>
+              </div>
+
+              {/* Snippet Stage Sub-tabs */}
+              <div className="tab-header" style={{ marginBottom: '1rem' }}>
+                <button
+                  className={`tab-btn ${activeCodeStage === 'pkce' ? 'active' : ''}`}
+                  onClick={() => setActiveCodeStage('pkce')}
+                >
+                  <Key size={14} /> 1. PKCE S256 Challenge
+                </button>
+                <button
+                  className={`tab-btn ${activeCodeStage === 'init' ? 'active' : ''}`}
+                  onClick={() => setActiveCodeStage('init')}
+                >
+                  <Code size={14} /> 2. Client Init & Auth URL
+                </button>
+                <button
+                  className={`tab-btn ${activeCodeStage === 'exchange' ? 'active' : ''}`}
+                  onClick={() => setActiveCodeStage('exchange')}
+                >
+                  <Cpu size={14} /> 3. Code Exchange & PQC Token
+                </button>
+                <button
+                  className={`tab-btn ${activeCodeStage === 'userinfo' ? 'active' : ''}`}
+                  onClick={() => setActiveCodeStage('userinfo')}
+                >
+                  <BookOpen size={14} /> 4. UserInfo Retrieval
+                </button>
+              </div>
+
+              {/* Active Code Block Card (R2 Code Header Strip Protection) */}
+              <div className="code-card">
+                <div className="code-header">
+                  <span className="mono" style={{ fontSize: '0.75rem' }}>
+                    {selectedLang.toUpperCase()} — Stage:{' '}
+                    {activeCodeStage === 'pkce'
+                      ? 'PKCE S256 Generator'
+                      : activeCodeStage === 'init'
+                      ? 'OAuth2 Initialization'
+                      : activeCodeStage === 'exchange'
+                      ? 'Token Exchange'
+                      : 'UserInfo Claims'}
+                  </span>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() =>
+                      copyToClipboard(
+                        `code-${selectedLang}-${activeCodeStage}`,
+                        activeCodeStage === 'pkce'
+                          ? langInfo.pkceCode
+                          : activeCodeStage === 'init'
+                          ? langInfo.clientInitCode
+                          : activeCodeStage === 'exchange'
+                          ? langInfo.tokenExchangeCode
+                          : langInfo.userinfoCode
+                      )
+                    }
+                  >
+                    {copiedMap[`code-${selectedLang}-${activeCodeStage}`] ? (
+                      <>
+                        <Check size={14} color="#10b981" />
+                        <span style={{ color: '#10b981', fontWeight: 600 }}>Copied Code!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={14} />
+                        <span>Copy Code</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <pre
+                  className="code-block"
+                  style={{
+                    borderTopLeftRadius: 0,
+                    borderTopRightRadius: 0,
+                    maxHeight: '380px',
+                    margin: 0,
+                    border: 'none'
+                  }}
+                >
+                  {activeCodeStage === 'pkce' && langInfo.pkceCode}
+                  {activeCodeStage === 'init' && langInfo.clientInitCode}
+                  {activeCodeStage === 'exchange' && langInfo.tokenExchangeCode}
+                  {activeCodeStage === 'userinfo' && langInfo.userinfoCode}
+                </pre>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION 3: Interactive API & Endpoint Reference */}
+          <section id="api-reference" style={{ marginBottom: '2.5rem' }}>
+            <div className="card card-glow">
+              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
+                <div>
+                  <h2>3. Interactive API & Post-Quantum Identity Reference</h2>
+                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    Test endpoints, configure live parameters (Client ID, Redirect URI, Token Strategy), and inspect exact response formats.
+                  </p>
+                </div>
+                <span className="badge badge-confidential">Live Interactive Playground</span>
+              </div>
+
+              <div className="api-ref-grid">
+                {/* Endpoint List Sidebar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div className="detail-label" style={{ marginBottom: '0.4rem' }}>DilithiAuth Endpoints</div>
+
+                  <button
+                    onClick={() => setSelectedEndpoint('discovery')}
+                    className={`btn ${selectedEndpoint === 'discovery' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
+                  >
+                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/.well-known/openid-configuration</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedEndpoint('jwks')}
+                    className={`btn ${selectedEndpoint === 'jwks' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
+                  >
+                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/.well-known/jwks.json</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedEndpoint('authorize')}
+                    className={`btn ${selectedEndpoint === 'authorize' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
+                  >
+                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
+                    <span>/authorize (PKCE)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedEndpoint('token')}
+                    className={`btn ${selectedEndpoint === 'token' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
+                  >
+                    <span className="badge badge-confidential" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>POST</span>
+                    <span>/token</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedEndpoint('userinfo')}
+                    className={`btn ${selectedEndpoint === 'userinfo' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
+                  >
+                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
+                    <span>/userinfo</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedEndpoint('revoke')}
+                    className={`btn ${selectedEndpoint === 'revoke' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
+                  >
+                    <span className="badge badge-confidential" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>POST</span>
+                    <span>/revoke</span>
+                  </button>
+                </div>
+
+                {/* Endpoint Tester & Inspector */}
+                <div style={{ minWidth: 0 }}>
+                  {/* Interactive Controls Header */}
                   <div
                     style={{
-                      background: '#060911',
+                      background: '#0b0f19',
                       border: '1px solid #1f2937',
                       borderRadius: '6px',
-                      padding: '1rem'
+                      padding: '0.85rem',
+                      marginBottom: '1rem'
                     }}
                   >
-                    <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#60a5fa' }}>
-                      Post-Quantum Signature Specification Breakdown
-                    </h3>
-                    <ul style={{ paddingLeft: '1.2rem', color: 'var(--text-sub)', fontSize: '0.85rem', lineHeight: '1.7' }}>
-                      <li>
-                        <strong>Ed25519 Classical Signature Size:</strong> <span className="mono">64 Bytes</span>
-                      </li>
-                      <li>
-                        <strong>NIST ML-DSA-44 Signature Size:</strong> <span className="mono">2,420 Bytes</span>
-                      </li>
-                      <li>
-                        <strong>Selected Token Mode ({tokenStrategy.toUpperCase()}):</strong>{' '}
-                        {tokenStrategy === 'thin' && (
-                          <span>Standard JWT (~500 Bytes) + SigStore <span className="mono">pqc_ref</span> Hash</span>
-                        )}
-                        {tokenStrategy === 'full' && (
-                          <span>Jumbo Embedded JWT (~3,840 Bytes) with full <span className="mono">pqc_sig</span> claim</span>
-                        )}
-                        {tokenStrategy === 'cwt' && (
-                          <span>Binary CBOR Web Token (~284 Bytes RFC 8392 format)</span>
-                        )}
-                      </li>
-                      <li>
-                        <strong>DilithiAuth Server Proxy Configuration:</strong>{' '}
-                        <span className="mono">MaxHeaderBytes = 16 KiB (16,384 Bytes)</span>
-                      </li>
-                    </ul>
+                    <div className="detail-label" style={{ marginBottom: '0.6rem' }}>Interactive Parameter Inputs</div>
+                    <div className="param-inputs-grid">
+                      <div>
+                        <label className="label">Client ID</label>
+                        <input
+                          type="text"
+                          value={clientId}
+                          onChange={(e) => setClientId(e.target.value)}
+                          placeholder="Client ID"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Redirect URI</label>
+                        <input
+                          type="text"
+                          value={redirectUri}
+                          onChange={(e) => setRedirectUri(e.target.value)}
+                          placeholder="Redirect URI"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">User Subject (sub)</label>
+                        <input
+                          type="text"
+                          value={subject}
+                          onChange={(e) => setSubject(e.target.value)}
+                          placeholder="Subject email/ID"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Token Strategy</label>
+                        <select
+                          value={tokenStrategy}
+                          onChange={(e) => setTokenStrategy(e.target.value as TokenStrategy)}
+                        >
+                          <option value="thin">Thin Token (Ed25519 + pqc_ref)</option>
+                          <option value="full">Jumbo Token (Embedded ML-DSA-44)</option>
+                          <option value="cwt">CBOR Web Token (CWT RFC 8392)</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                )}
+
+                  {/* Response Preview Header (R2 Wrapped URL & Button Protection) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderBottom: '1px solid #1f2937',
+                      paddingBottom: '0.5rem',
+                      marginBottom: '0.75rem',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem'
+                    }}
+                  >
+                    <div className="flex items-center gap-2" style={{ minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                      <span
+                        className={`badge ${
+                          endpointRes.method === 'GET' ? 'badge-public' : 'badge-confidential'
+                        }`}
+                        style={{ flexShrink: 0 }}
+                      >
+                        {endpointRes.method}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: '0.85rem',
+                          color: '#f9fafb',
+                          wordBreak: 'break-all',
+                          maxWidth: '100%'
+                        }}
+                      >
+                        {endpointRes.url}
+                      </span>
+                      <span
+                        className="badge"
+                        style={{
+                          background: 'rgba(5, 150, 105, 0.15)',
+                          color: '#6ee7b7',
+                          border: '1px solid rgba(5, 150, 105, 0.3)',
+                          flexShrink: 0
+                        }}
+                      >
+                        {endpointRes.status} {endpointRes.statusText}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2" style={{ flexShrink: 0 }}>
+                      <button
+                        className={`btn btn-sm ${endpointTab === 'body' ? 'btn-primary' : 'btn-outline'}`}
+                        onClick={() => setEndpointTab('body')}
+                      >
+                        Body
+                      </button>
+                      <button
+                        className={`btn btn-sm ${endpointTab === 'headers' ? 'btn-primary' : 'btn-outline'}`}
+                        onClick={() => setEndpointTab('headers')}
+                      >
+                        Headers
+                      </button>
+                      <button
+                        className={`btn btn-sm ${endpointTab === 'metrics' ? 'btn-primary' : 'btn-outline'}`}
+                        onClick={() => setEndpointTab('metrics')}
+                      >
+                        PQC Metrics
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inspector Output Panels (R2 Code Header Strip Protection) */}
+                  {endpointTab === 'body' && (
+                    <div className="code-card">
+                      <div className="code-header">
+                        <span className="mono" style={{ fontSize: '0.75rem' }}>
+                          Response Body (JSON)
+                        </span>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() =>
+                            copyToClipboard(`res-body-${selectedEndpoint}-${tokenStrategy}`, JSON.stringify(endpointRes.body, null, 2))
+                          }
+                        >
+                          {copiedMap[`res-body-${selectedEndpoint}-${tokenStrategy}`] ? (
+                            <>
+                              <Check size={13} color="#10b981" />
+                              <span style={{ color: '#10b981' }}>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={13} />
+                              <span>Copy Response</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <pre
+                        className="code-block"
+                        style={{
+                          borderTopLeftRadius: 0,
+                          borderTopRightRadius: 0,
+                          maxHeight: '340px',
+                          margin: 0,
+                          border: 'none'
+                        }}
+                      >
+                        {JSON.stringify(endpointRes.body, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {endpointTab === 'headers' && (
+                    <div className="code-card">
+                      <div className="code-header">
+                        <span className="mono" style={{ fontSize: '0.75rem' }}>Response Headers</span>
+                      </div>
+                      <pre className="code-block" style={{ maxHeight: '340px', margin: 0, border: 'none' }}>
+                        {Object.entries(endpointRes.headers)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join('\n')}
+                      </pre>
+                    </div>
+                  )}
+
+                  {endpointTab === 'metrics' && (
+                    <div
+                      style={{
+                        background: '#060911',
+                        border: '1px solid #1f2937',
+                        borderRadius: '6px',
+                        padding: '1rem'
+                      }}
+                    >
+                      <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#60a5fa' }}>
+                        Post-Quantum Signature Specification Breakdown
+                      </h3>
+                      <ul style={{ paddingLeft: '1.2rem', color: 'var(--text-sub)', fontSize: '0.85rem', lineHeight: '1.7' }}>
+                        <li>
+                          <strong>Ed25519 Classical Signature Size:</strong> <span className="mono">64 Bytes</span>
+                        </li>
+                        <li>
+                          <strong>NIST ML-DSA-44 Signature Size:</strong> <span className="mono">2,420 Bytes</span>
+                        </li>
+                        <li>
+                          <strong>Selected Token Mode ({tokenStrategy.toUpperCase()}):</strong>{' '}
+                          {tokenStrategy === 'thin' && (
+                            <span>Standard JWT (~500 Bytes) + SigStore <span className="mono">pqc_ref</span> Hash</span>
+                          )}
+                          {tokenStrategy === 'full' && (
+                            <span>Jumbo Embedded JWT (~3,840 Bytes) with full <span className="mono">pqc_sig</span> claim</span>
+                          )}
+                          {tokenStrategy === 'cwt' && (
+                            <span>Binary CBOR Web Token (~284 Bytes RFC 8392 format)</span>
+                          )}
+                        </li>
+                        <li>
+                          <strong>DilithiAuth Server Proxy Configuration:</strong>{' '}
+                          <span className="mono">MaxHeaderBytes = 16 KiB (16,384 Bytes)</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* SECTION 4: Post-Quantum Token Architecture Comparison */}
-        <section id="token-strategies" style={{ marginBottom: '2.5rem' }}>
-          <div className="card">
-            <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
-              <div>
-                <h2>4. Post-Quantum Token Strategy Architecture</h2>
-                <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-                  Solving the NIST ML-DSA-44 2.4 KB "token bloat" problem through modular token delivery mechanisms.
-                </p>
+          {/* SECTION 4: Post-Quantum Token Architecture Comparison */}
+          <section id="token-strategies" style={{ marginBottom: '2.5rem' }}>
+            <div className="card">
+              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
+                <div>
+                  <h2>4. Post-Quantum Token Strategy Architecture</h2>
+                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    Solving the NIST ML-DSA-44 2.4 KB "token bloat" problem through modular token delivery mechanisms.
+                  </p>
+                </div>
+                <span className="badge badge-hybrid">
+                  <Cpu size={12} /> 16 KiB Header Engine
+                </span>
               </div>
-              <span className="badge badge-hybrid">
-                <Cpu size={12} /> 16 KiB Header Engine
-              </span>
+
+              <div className="features" style={{ padding: 0 }}>
+                {/* Thin Token Card */}
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    <Layers size={20} />
+                  </div>
+                  <h3>1. Thin Tokens (Recommended Default)</h3>
+                  <p style={{ marginBottom: '0.75rem' }}>
+                    JWT contains classical Ed25519 signature and a cryptographic SHA-256 hash reference (<span className="mono">pqc_ref</span>)
+                    pointing to the ML-DSA-44 signature stored out-of-band in SigStore (Redis/Memory).
+                  </p>
+                  <div className="detail-label">Size & Compatibility</div>
+                  <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>
+                    ~500 Bytes • Zero Proxy Header Bloat
+                  </div>
+                </div>
+
+                {/* Jumbo Token Card */}
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    <Key size={20} />
+                  </div>
+                  <h3>2. Jumbo Tokens (Full Embedded)</h3>
+                  <p style={{ marginBottom: '0.75rem' }}>
+                    JWT directly embeds the entire ~2.4 KB ML-DSA-44 signature inside the <span className="mono">pqc_sig</span> claim.
+                    Fully self-contained for offline verification without cache lookups.
+                  </p>
+                  <div className="detail-label">Size & Header Config</div>
+                  <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#fcd34d' }}>
+                    ~4.0 KB • MaxHeaderBytes = 16 KiB
+                  </div>
+                </div>
+
+                {/* CBOR Web Token Card */}
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    <ChevronRight size={20} />
+                  </div>
+                  <h3>3. CBOR Web Tokens (CWT RFC 8392)</h3>
+                  <p style={{ marginBottom: '0.75rem' }}>
+                    Binary encoded token using CBOR integer claim mapping (1:iss, 2:sub, 4:exp, 8:pqc_ref).
+                    Delivers 25-30% footprint reduction for low-bandwidth mobile and IoT networks.
+                  </p>
+                  <div className="detail-label">Size & Encoding</div>
+                  <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#38bdf8' }}>
+                    ~280 Bytes • Binary Compact Format
+                  </div>
+                </div>
+              </div>
+
+              {/* Architecture Footer Callout */}
+              <div className="alert alert-info" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
+                <Shield size={16} />
+                <div>
+                  <strong>Reverse Proxy Configuration Note:</strong> When operating Jumbo Tokens in production, reverse proxies (Nginx, Envoy, Cloudflare) must be configured with <span className="mono">large_client_header_buffers 4 16k;</span> to accommodate ~4 KB Authorization header tokens.
+                </div>
+              </div>
             </div>
+          </section>
+        </main>
 
-            <div className="features" style={{ padding: 0 }}>
-              {/* Thin Token Card */}
-              <div className="feature-card">
-                <div className="feature-icon">
-                  <Layers size={20} />
-                </div>
-                <h3>1. Thin Tokens (Recommended Default)</h3>
-                <p style={{ marginBottom: '0.75rem' }}>
-                  JWT contains classical Ed25519 signature and a cryptographic SHA-256 hash reference (<span className="mono">pqc_ref</span>)
-                  pointing to the ML-DSA-44 signature stored out-of-band in SigStore (Redis/Memory).
-                </p>
-                <div className="detail-label">Size & Compatibility</div>
-                <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>
-                  ~500 Bytes • Zero Proxy Header Bloat
-                </div>
-              </div>
-
-              {/* Jumbo Token Card */}
-              <div className="feature-card">
-                <div className="feature-icon">
-                  <Key size={20} />
-                </div>
-                <h3>2. Jumbo Tokens (Full Embedded)</h3>
-                <p style={{ marginBottom: '0.75rem' }}>
-                  JWT directly embeds the entire ~2.4 KB ML-DSA-44 signature inside the <span className="mono">pqc_sig</span> claim.
-                  Fully self-contained for offline verification without cache lookups.
-                </p>
-                <div className="detail-label">Size & Header Config</div>
-                <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#fcd34d' }}>
-                  ~4.0 KB • MaxHeaderBytes = 16 KiB
-                </div>
-              </div>
-
-              {/* CBOR Web Token Card */}
-              <div className="feature-card">
-                <div className="feature-icon">
-                  <ChevronRight size={20} />
-                </div>
-                <h3>3. CBOR Web Tokens (CWT RFC 8392)</h3>
-                <p style={{ marginBottom: '0.75rem' }}>
-                  Binary encoded token using CBOR integer claim mapping (1:iss, 2:sub, 4:exp, 8:pqc_ref).
-                  Delivers 25-30% footprint reduction for low-bandwidth mobile and IoT networks.
-                </p>
-                <div className="detail-label">Size & Encoding</div>
-                <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#38bdf8' }}>
-                  ~280 Bytes • Binary Compact Format
-                </div>
-              </div>
-            </div>
-
-            {/* Architecture Footer Callout */}
-            <div className="alert alert-info" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
-              <Shield size={16} />
-              <div>
-                <strong>Reverse Proxy Configuration Note:</strong> When operating Jumbo Tokens in production, reverse proxies (Nginx, Envoy, Cloudflare) must be configured with <span className="mono">large_client_header_buffers 4 16k;</span> to accommodate ~4 KB Authorization header tokens.
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* Right Sticky Table of Contents (Desktop ≥1024px) */}
+        <aside className="docs-toc">
+          <div className="toc-title">On This Page</div>
+          <a href="#quickstart" className="toc-link">1. SDK Quickstart</a>
+          <a href="#code-snippets" className="toc-link">2. Code Snippets</a>
+          <a href="#api-reference" className="toc-link">3. API Reference</a>
+          <a href="#token-strategies" className="toc-link">4. PQC Token Strategies</a>
+        </aside>
       </div>
     </div>
   )
