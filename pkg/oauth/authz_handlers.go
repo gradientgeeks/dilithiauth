@@ -1288,17 +1288,28 @@ func (h *AuthzHandlers) SocialLoginGET(w http.ResponseWriter, r *http.Request) {
 	codeChallenge := r.URL.Query().Get("code_challenge")
 	codeChallengeMethod := r.URL.Query().Get("code_challenge_method")
 
+	tenantID := tenant.FromContext(r.Context())
 	if clientID == "" {
 		clientID = "da_developer_portal"
 	}
-	if redirectURI == "" {
-		redirectURI = "https://dilithiauth.gradientgeeks.tech/apps"
-	}
 
-	tenantID := tenant.FromContext(r.Context())
-	_, err := h.clientValidator().ValidateClient(tenantID, clientID, redirectURI)
-	if err != nil {
-		http.Error(w, "invalid client: "+err.Error(), http.StatusBadRequest)
+	var client *OAuthClient
+	var err error
+	if redirectURI != "" {
+		client, err = h.clientValidator().ValidateClient(tenantID, clientID, redirectURI)
+	}
+	if err != nil || redirectURI == "" {
+		client, err = h.clientValidator().ValidateClient(tenantID, clientID, "")
+		if err == nil && client != nil {
+			redirectURI = client.RedirectURI
+		}
+	}
+	if err != nil || client == nil {
+		errMsg := "invalid client"
+		if err != nil {
+			errMsg += ": " + err.Error()
+		}
+		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
 
