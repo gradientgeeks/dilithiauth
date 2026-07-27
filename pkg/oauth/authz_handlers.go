@@ -1288,9 +1288,11 @@ func (h *AuthzHandlers) SocialLoginGET(w http.ResponseWriter, r *http.Request) {
 	codeChallenge := r.URL.Query().Get("code_challenge")
 	codeChallengeMethod := r.URL.Query().Get("code_challenge_method")
 
-	if clientID == "" || redirectURI == "" {
-		http.Error(w, "missing client_id or redirect_uri", http.StatusBadRequest)
-		return
+	if clientID == "" {
+		clientID = "da_developer_portal"
+	}
+	if redirectURI == "" {
+		redirectURI = "https://dilithiauth.gradientgeeks.tech/apps"
 	}
 
 	tenantID := tenant.FromContext(r.Context())
