@@ -237,7 +237,7 @@ func (s *MemoryAuthzStore) ValidateClient(tenantID, clientID, redirectURI string
 	if !ok {
 		return nil, errors.New("unknown client")
 	}
-	if c.RedirectURI != redirectURI {
+	if redirectURI != "" && c.RedirectURI != redirectURI {
 		return nil, errors.New("redirect_uri mismatch")
 	}
 	return c, nil

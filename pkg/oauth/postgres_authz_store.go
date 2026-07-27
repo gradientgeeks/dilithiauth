@@ -53,25 +53,32 @@ func configureDBPool(db *sql.DB) {
 	db.SetConnMaxIdleTime(2 * time.Minute)
 }
 
-// ValidateClient checks that client_id exists and redirectURI is in the app's
-// registered redirect_uris array. Used by AuthorizeGET before showing the login form.
 func (s *PostgresAuthzStore) ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error) {
 	var c OAuthClient
-	err := s.db.QueryRowContext(context.Background(),
-		`SELECT client_id, client_secret_hash, name, developer_id, is_public
-		 FROM oauth_apps
-		 WHERE client_id = $1 AND $2 = ANY(redirect_uris)`,
-		clientID, redirectURI,
-	).Scan(&c.ClientID, &c.ClientSecretHash, &c.Name, &c.DeveloperID, new(bool))
+	var err error
+	if redirectURI == "" {
+		err = s.db.QueryRowContext(context.Background(),
+			`SELECT client_id, client_secret_hash, name, developer_id, is_public, redirect_uris[1]
+			 FROM oauth_apps
+			 WHERE client_id = $1`,
+			clientID,
+		).Scan(&c.ClientID, &c.ClientSecretHash, &c.Name, &c.DeveloperID, new(bool), &c.RedirectURI)
+	} else {
+		err = s.db.QueryRowContext(context.Background(),
+			`SELECT client_id, client_secret_hash, name, developer_id, is_public
+			 FROM oauth_apps
+			 WHERE client_id = $1 AND $2 = ANY(redirect_uris)`,
+			clientID, redirectURI,
+		).Scan(&c.ClientID, &c.ClientSecretHash, &c.Name, &c.DeveloperID, new(bool))
+		c.RedirectURI = redirectURI
+	}
 
 	if errors.Is(err, sql.ErrNoRows) {
-		// Avoid revealing whether the client_id exists at all.
 		return nil, errors.New("unknown client or redirect_uri mismatch")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("postgres_authz_store: validate client: %w", err)
 	}
-	c.RedirectURI = redirectURI // the specific URI that matched
 	return &c, nil
 }
 
