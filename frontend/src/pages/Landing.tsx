@@ -18,9 +18,8 @@ export default function Landing() {
             Identity & Access Management
           </h1>
           <p>
-            DilithiAuth issues hybrid tokens combining classical Ed25519 with NIST-standardized 
-            <strong> ML-DSA-44</strong> signatures, protecting authentication infrastructure against 
-            "Harvest Now, Decrypt Later" (HNDL) quantum threats.
+            DilithiAuth is a research-oriented Identity Provider (IdP) implementing the Authorization Code Flow with hybrid signatures combining classical Ed25519 with NIST-standardized 
+            <strong> ML-DSA-44</strong> (FIPS 204) digital signatures, mitigating "Harvest Now, Forge Later" (HNFL) threats to prevent future quantum-enabled token forgery and identity impersonation.
           </p>
           <div className="hero-actions">
             <Link to="/register" className="btn btn-primary" style={{ padding: '0.65rem 1.4rem' }}>

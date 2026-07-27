@@ -779,8 +779,7 @@ export default function Docs() {
               </span>
               <h1>DilithiAuth SDK & Interactive Documentation</h1>
               <p style={{ maxWidth: '680px' }}>
-                Post-quantum OAuth 2.0 & OIDC identity integration guides, authentic PKCE S256 flow snippets,
-                and live Post-Quantum Token strategy reference.
+                DilithiAuth is a research-oriented Identity Provider (IdP) designed to mitigate the "Harvest Now, Forge Later" (HNFL) threat. It implements the Authorization Code Flow using hybrid signatures combining classical Ed25519 with NIST-standardized ML-DSA-44 (FIPS 204) to prevent future quantum-enabled token forgery and identity impersonation.
               </p>
             </div>
             <div className="flex gap-2">

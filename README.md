@@ -1,6 +1,6 @@
 # DilithiAuth
 
-DilithiAuth is a post-quantum OAuth 2.0 Identity Provider designed to mitigate the "Harvest Now, Decrypt Later" (HNDL) threat. It implements the OAuth 2.0 Authorization Code Flow using hybrid signatures combining **Ed25519** (classical) and **ML-DSA-44** (Module-Lattice Digital Signature Algorithm, the NIST FIPS 204 standardized algorithm for post-quantum digital signatures).
+DilithiAuth is a research-oriented Identity Provider (IdP) designed to mitigate the **"Harvest Now, Forge Later" (HNFL)** threat. It implements the OAuth 2.0 Authorization Code Flow using hybrid signatures combining **Ed25519** (classical) and **ML-DSA-44** (Module-Lattice Digital Signature Algorithm, the NIST FIPS 204 standardized algorithm for post-quantum digital signatures) to prevent future quantum-enabled token forgery and identity impersonation.
 
 ## The Problem: Post-Quantum Token Bloat
 
