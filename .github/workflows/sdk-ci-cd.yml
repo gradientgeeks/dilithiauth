@@ -121,16 +121,29 @@ jobs:
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Enable GitHub OIDC token issuance for Trusted Publishing on nuget.org
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Push to NuGet
+      - name: Build and Pack .NET SDK
         run: |
           cd sdk/dotnet/DilithiAuth.Client
           dotnet pack -c Release
-          dotnet nuget push bin/Release/*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
+      - name: NuGet Login (OIDC Trusted Publishing)
+        uses: NuGet/login@v1
+        id: login
+        continue-on-error: true
+        with:
+          user: ${{ secrets.NUGET_USER || 'Uttam-Mahata' }}
+      - name: Push to NuGet
+        run: |
+          cd sdk/dotnet/DilithiAuth.Client
+          API_KEY="${{ steps.login.outputs.NUGET_API_KEY || secrets.NUGET_API_KEY }}"
+          dotnet nuget push bin/Release/*.nupkg -k "$API_KEY" -s https://api.nuget.org/v3/index.json
 
   publish-go:
     name: Index Go Module on Go Proxy
