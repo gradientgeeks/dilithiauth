@@ -73,9 +73,19 @@ type AuthzStore interface {
 	// ValidateClientWithSecret authenticates a confidential client. For public
 	// clients (ClientSecretHash == ""), clientSecret must be empty.
 	ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI string) (*OAuthClient, error)
+	// ValidateClientSecretOnly authenticates a client by client_id+client_secret
+	// alone, with no redirect_uri check — used by the refresh_token grant.
+	ValidateClientSecretOnly(tenantID, clientID, clientSecret string) (*OAuthClient, error)
 	// RegisterUser creates a new user account. Returns an error if the username
 	// or email is already taken.
 	RegisterUser(tenantID string, u *User) error
+	// GetUserBySubject looks up a user by their stable JWT sub claim.
+	GetUserBySubject(tenantID, subject string) (*User, error)
+	// GetUserByEmail looks up a user by email, used by the password-reset flow.
+	GetUserByEmail(tenantID, email string) (*User, error)
+	// SetPassword updates a user's password (bcrypt hash), used by the
+	// password-reset flow.
+	SetPassword(tenantID, username, newPasswordHash string) error
 }
 
 // MemoryAuthzStore is a fully in-memory, multi-tenant AuthzStore.
@@ -168,6 +178,46 @@ func (s *MemoryAuthzStore) AuthenticateUser(tenantID, username, password string)
 	return u, nil
 }
 
+// GetUserBySubject looks up a user by their stable JWT sub claim within a tenant.
+func (s *MemoryAuthzStore) GetUserBySubject(tenantID, subject string) (*User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, u := range s.users[tenantID] {
+		if u.Subject == subject {
+			return u, nil
+		}
+	}
+	return nil, errors.New("user not found")
+}
+
+// GetUserByEmail looks up a user by email within a tenant.
+func (s *MemoryAuthzStore) GetUserByEmail(tenantID, email string) (*User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, u := range s.users[tenantID] {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return nil, errors.New("user not found")
+}
+
+// SetPassword updates a user's password (bcrypt hash) within a tenant.
+func (s *MemoryAuthzStore) SetPassword(tenantID, username, newPasswordHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tenant := s.users[tenantID]
+	if tenant == nil {
+		return errors.New("user not found")
+	}
+	u, ok := tenant[username]
+	if !ok {
+		return errors.New("user not found")
+	}
+	u.Password = newPasswordHash
+	return nil
+}
+
 func (s *MemoryAuthzStore) ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -194,6 +244,33 @@ func (s *MemoryAuthzStore) ValidateClientWithSecret(tenantID, clientID, clientSe
 	}
 	if client.ClientSecretHash == "" {
 		// Public client (PKCE-only): no secret expected.
+		if clientSecret != "" {
+			return nil, errors.New("public client does not accept client_secret")
+		}
+		return client, nil
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecretHash), []byte(clientSecret)); err != nil {
+		return nil, errors.New("invalid client_secret")
+	}
+	return client, nil
+}
+
+// ValidateClientSecretOnly authenticates a client by client_id+client_secret
+// alone, with no redirect_uri check (used by the refresh_token grant).
+func (s *MemoryAuthzStore) ValidateClientSecretOnly(tenantID, clientID, clientSecret string) (*OAuthClient, error) {
+	s.mu.RLock()
+	tenantClients := s.clients[tenantID]
+	var client *OAuthClient
+	if tenantClients != nil {
+		client = tenantClients[clientID]
+	}
+	s.mu.RUnlock()
+
+	if client == nil {
+		_ = bcrypt.CompareHashAndPassword(bcryptDummyHash, []byte(clientSecret))
+		return nil, errors.New("unknown client")
+	}
+	if client.ClientSecretHash == "" {
 		if clientSecret != "" {
 			return nil, errors.New("public client does not accept client_secret")
 		}
@@ -265,4 +342,49 @@ func (s *MemoryAuthzStore) RedeemCode(tenantID, code, clientID, redirectURI, cod
 	}
 	ac.Used = true
 	return ac, nil
+}
+
+// CompositeClientValidator checks Primary ClientValidator first, falling back to Secondary.
+type CompositeClientValidator struct {
+	Primary   ClientValidator
+	Secondary ClientValidator
+}
+
+func (c *CompositeClientValidator) ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error) {
+	if c.Primary != nil {
+		client, err := c.Primary.ValidateClient(tenantID, clientID, redirectURI)
+		if err == nil {
+			return client, nil
+		}
+	}
+	if c.Secondary != nil {
+		return c.Secondary.ValidateClient(tenantID, clientID, redirectURI)
+	}
+	return nil, errors.New("unknown client")
+}
+
+func (c *CompositeClientValidator) ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI string) (*OAuthClient, error) {
+	if c.Primary != nil {
+		client, err := c.Primary.ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI)
+		if err == nil {
+			return client, nil
+		}
+	}
+	if c.Secondary != nil {
+		return c.Secondary.ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI)
+	}
+	return nil, errors.New("unknown client")
+}
+
+func (c *CompositeClientValidator) ValidateClientSecretOnly(tenantID, clientID, clientSecret string) (*OAuthClient, error) {
+	if c.Primary != nil {
+		client, err := c.Primary.ValidateClientSecretOnly(tenantID, clientID, clientSecret)
+		if err == nil {
+			return client, nil
+		}
+	}
+	if c.Secondary != nil {
+		return c.Secondary.ValidateClientSecretOnly(tenantID, clientID, clientSecret)
+	}
+	return nil, errors.New("unknown client")
 }

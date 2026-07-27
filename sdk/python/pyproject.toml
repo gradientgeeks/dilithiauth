@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dilithiauth"
+version = "1.0.0"
+description = "Official Python Client SDK for DilithiAuth Post-Quantum Identity Provider"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "DilithiAuth Team", email = "support@gradientgeeks.tech"}
+]
+keywords = ["dilithiauth", "oauth2", "oidc", "pkce", "post-quantum", "dilithium", "ml-dsa-44"]
+dependencies = [
+    "urllib3>=1.26.0"
+]
+
+[project.urls]
+Homepage = "https://dilithiauthapis.gradientgeeks.tech"

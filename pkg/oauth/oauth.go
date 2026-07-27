@@ -21,14 +21,14 @@ import (
 // DiscoveryDocument is the OpenID Connect discovery metadata published at
 // /.well-known/openid-configuration (RFC 8414).
 type DiscoveryDocument struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	JWKsURI                           string   `json:"jwks_uri"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	SubjectTypesSupported             []string `json:"subject_types_supported"`
-	IDTokenSigningAlgValuesSupported  []string `json:"id_token_signing_alg_values_supported"`
-	PQCHybridEnabled                  bool     `json:"pqc_hybrid_enabled"`
+	Issuer                           string   `json:"issuer"`
+	AuthorizationEndpoint            string   `json:"authorization_endpoint"`
+	TokenEndpoint                    string   `json:"token_endpoint"`
+	JWKsURI                          string   `json:"jwks_uri"`
+	ResponseTypesSupported           []string `json:"response_types_supported"`
+	SubjectTypesSupported            []string `json:"subject_types_supported"`
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	PQCHybridEnabled                 bool     `json:"pqc_hybrid_enabled"`
 }
 
 // JWKSDocument holds the public keys published at the JWKS URI.
@@ -39,13 +39,13 @@ type JWKSDocument struct {
 // JWK is a minimal JSON Web Key representation that embeds both the
 // classical Ed25519 and post-quantum ML-DSA-44 public-key bytes.
 type JWK struct {
-	Kid         string `json:"kid"`
-	Kty         string `json:"kty"`
-	Crv         string `json:"crv,omitempty"`
-	X           string `json:"x,omitempty"`         // Ed25519 public key (base64url)
-	MLDSA44Pub  string `json:"mldsa44_pub,omitempty"` // ML-DSA-44 public key (base64url)
-	Use         string `json:"use"`
-	Alg         string `json:"alg"`
+	Kid        string `json:"kid"`
+	Kty        string `json:"kty"`
+	Crv        string `json:"crv,omitempty"`
+	X          string `json:"x,omitempty"`           // Ed25519 public key (base64url)
+	MLDSA44Pub string `json:"mldsa44_pub,omitempty"` // ML-DSA-44 public key (base64url)
+	Use        string `json:"use"`
+	Alg        string `json:"alg"`
 }
 
 // Provider holds the configuration and key material for a DilithiAuth IdP.
@@ -78,10 +78,10 @@ func (p *Provider) activeKeyPair() *signer.HybridKeyPair {
 // DiscoveryDocument returns the OpenID Connect discovery metadata.
 func (p *Provider) DiscoveryDocument() *DiscoveryDocument {
 	return &DiscoveryDocument{
-		Issuer:                p.Issuer,
-		AuthorizationEndpoint: p.Issuer + "/authorize",
-		TokenEndpoint:         p.Issuer + "/token",
-		JWKsURI:               p.Issuer + "/.well-known/jwks.json",
+		Issuer:                 p.Issuer,
+		AuthorizationEndpoint:  p.Issuer + "/authorize",
+		TokenEndpoint:          p.Issuer + "/token",
+		JWKsURI:                p.Issuer + "/.well-known/jwks.json",
 		ResponseTypesSupported: []string{"code"},
 		SubjectTypesSupported:  []string{"public"},
 		IDTokenSigningAlgValuesSupported: []string{
@@ -156,6 +156,13 @@ type HybridClaims struct {
 	// PQCSig embeds the full ML-DSA-44 signature directly (base64url). Only
 	// used in "Jumbo Token" mode. Set to empty string for "Thin Token" mode.
 	PQCSig string `json:"pqc_sig,omitempty"`
+	// TenantID scopes this token to the tenant it was issued under. A missing
+	// value is treated as tenant.DefaultTenantID by verifiers for backward
+	// compatibility with tokens issued before this claim existed.
+	TenantID string `json:"tid,omitempty"`
+	// Scope lists the space-delimited OAuth scopes granted to this token
+	// (e.g. "openid profile email"), set from the consent grant at issuance.
+	Scope string `json:"scope,omitempty"`
 }
 
 // ThinTokenResult is returned by IssueJWTThin. The full ML-DSA-44 signature
@@ -174,7 +181,13 @@ type ThinTokenResult struct {
 // plus a pqc_ref pointing to the ML-DSA-44 signature stored in a sidecar.
 // This keeps the token small (< 500 bytes) while still providing a quantum-safe
 // audit trail.
-func (p *Provider) IssueJWTThin(subject string, ttl time.Duration) (*ThinTokenResult, error) {
+func (p *Provider) IssueJWTThin(tenantID, subject string, ttl time.Duration) (*ThinTokenResult, error) {
+	return p.IssueJWTThinWithScope(tenantID, subject, "", ttl)
+}
+
+// IssueJWTThinWithScope is IssueJWTThin with an explicit granted-scope claim
+// (space-delimited, e.g. "openid profile email") recorded on the token.
+func (p *Provider) IssueJWTThinWithScope(tenantID, subject, scope string, ttl time.Duration) (*ThinTokenResult, error) {
 	now := time.Now()
 	jti, err := generateID()
 	if err != nil {
@@ -189,6 +202,8 @@ func (p *Provider) IssueJWTThin(subject string, ttl time.Duration) (*ThinTokenRe
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			ID:        jti,
 		},
+		TenantID: tenantID,
+		Scope:    scope,
 	}
 
 	// Sign the payload with ML-DSA-44 first so we can compute the reference.
@@ -227,7 +242,12 @@ func (p *Provider) IssueJWTThin(subject string, ttl time.Duration) (*ThinTokenRe
 // IssueJWTFull creates a "Jumbo" JWT that embeds the full ML-DSA-44 signature
 // directly in the pqc_sig claim. The resulting token is large (~3-4 KB) but
 // self-contained: no sidecar lookup is required.
-func (p *Provider) IssueJWTFull(subject string, ttl time.Duration) (string, error) {
+func (p *Provider) IssueJWTFull(tenantID, subject string, ttl time.Duration) (string, error) {
+	return p.IssueJWTFullWithScope(tenantID, subject, "", ttl)
+}
+
+// IssueJWTFullWithScope is IssueJWTFull with an explicit granted-scope claim.
+func (p *Provider) IssueJWTFullWithScope(tenantID, subject, scope string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	jti, err := generateID()
 	if err != nil {
@@ -259,7 +279,9 @@ func (p *Provider) IssueJWTFull(subject string, ttl time.Duration) (string, erro
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			ID:        jti,
 		},
-		PQCSig: base64.RawURLEncoding.EncodeToString(hybridSig.MLDSASig),
+		PQCSig:   base64.RawURLEncoding.EncodeToString(hybridSig.MLDSASig),
+		TenantID: tenantID,
+		Scope:    scope,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
@@ -280,13 +302,15 @@ func (p *Provider) IssueJWTFull(subject string, ttl time.Duration) (string, erro
 // Using integer keys instead of string keys saves significant space in the
 // binary CBOR encoding.
 type CWTClaims struct {
-	Issuer    string `cbor:"1,keyasint"`  // iss
-	Subject   string `cbor:"2,keyasint"`  // sub
-	Audience  string `cbor:"3,keyasint,omitempty"` // aud
-	ExpiresAt int64  `cbor:"4,keyasint"`  // exp
-	IssuedAt  int64  `cbor:"6,keyasint"`  // iat
-	JWTID     string `cbor:"7,keyasint"`  // cti
-	PQCRef    string `cbor:"8,keyasint,omitempty"` // private: pqc_ref
+	Issuer    string `cbor:"1,keyasint"`            // iss
+	Subject   string `cbor:"2,keyasint"`            // sub
+	Audience  string `cbor:"3,keyasint,omitempty"`  // aud
+	ExpiresAt int64  `cbor:"4,keyasint"`            // exp
+	IssuedAt  int64  `cbor:"6,keyasint"`            // iat
+	JWTID     string `cbor:"7,keyasint"`            // cti
+	PQCRef    string `cbor:"8,keyasint,omitempty"`  // private: pqc_ref
+	TenantID  string `cbor:"9,keyasint,omitempty"`  // private: tid — see HybridClaims.TenantID
+	Scope     string `cbor:"10,keyasint,omitempty"` // private: scope — see HybridClaims.Scope
 }
 
 // CWTResult contains the binary CBOR token and supporting metadata.
@@ -305,7 +329,12 @@ type CWTResult struct {
 // IssueCWT issues a CBOR Web Token (RFC 8392) signed with Ed25519. The
 // ML-DSA-44 signature is stored separately (thin-token approach) to keep the
 // binary token below the infrastructure header limits.
-func (p *Provider) IssueCWT(subject string, ttl time.Duration) (*CWTResult, error) {
+func (p *Provider) IssueCWT(tenantID, subject string, ttl time.Duration) (*CWTResult, error) {
+	return p.IssueCWTWithScope(tenantID, subject, "", ttl)
+}
+
+// IssueCWTWithScope is IssueCWT with an explicit granted-scope claim.
+func (p *Provider) IssueCWTWithScope(tenantID, subject, scope string, ttl time.Duration) (*CWTResult, error) {
 	now := time.Now()
 	jti, err := generateID()
 	if err != nil {
@@ -318,6 +347,8 @@ func (p *Provider) IssueCWT(subject string, ttl time.Duration) (*CWTResult, erro
 		ExpiresAt: now.Add(ttl).Unix(),
 		IssuedAt:  now.Unix(),
 		JWTID:     jti,
+		TenantID:  tenantID,
+		Scope:     scope,
 	}
 
 	// Compute ML-DSA-44 signature over the CBOR-encoded base claims.

@@ -41,7 +41,7 @@ type HybridSignature struct {
 // PublicKeyInfo contains the serialisable public-key material that should be
 // published in the JWKS endpoint.
 type PublicKeyInfo struct {
-	Kid          string `json:"kid"`
+	Kid           string `json:"kid"`
 	Ed25519Public []byte `json:"ed25519_pub"`
 	MLDSAPublic   []byte `json:"mldsa44_pub"`
 }
@@ -70,11 +70,11 @@ func GenerateHybridKeyPair() (*HybridKeyPair, error) {
 	}
 
 	return &HybridKeyPair{
-		Kid:           kid,
+		Kid:            kid,
 		Ed25519Public:  edPub,
 		Ed25519Private: edPriv,
-		MLDSAPublic:   mlPub,
-		MLDSAPrivate:  mlPriv,
+		MLDSAPublic:    mlPub,
+		MLDSAPrivate:   mlPriv,
 	}, nil
 }
 
@@ -129,7 +129,7 @@ func (kp *HybridKeyPair) VerifyBoth(msg []byte, sig *HybridSignature) bool {
 // PublicKeyInfo returns the serialisable public-key material.
 func (kp *HybridKeyPair) PublicKeyInfo() *PublicKeyInfo {
 	return &PublicKeyInfo{
-		Kid:          kp.Kid,
+		Kid:           kp.Kid,
 		Ed25519Public: []byte(kp.Ed25519Public),
 		MLDSAPublic:   kp.MLDSAPublic.Bytes(),
 	}

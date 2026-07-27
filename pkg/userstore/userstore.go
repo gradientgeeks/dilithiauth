@@ -13,6 +13,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +50,10 @@ type UserStore interface {
 	Authenticate(ctx context.Context, tenantID, username, password string) (*User, error)
 	// GetBySubject looks up a user by their JWT subject claim.
 	GetBySubject(ctx context.Context, tenantID, subject string) (*User, error)
+	// GetByEmail looks up a user by email, used by the password-reset flow.
+	GetByEmail(ctx context.Context, tenantID, email string) (*User, error)
+	// SetPassword updates a user's password hash, used by the password-reset flow.
+	SetPassword(ctx context.Context, tenantID, username, newPasswordHash string) error
 }
 
 // PostgresUserStore implements UserStore backed by PostgreSQL.
@@ -65,6 +71,7 @@ func NewPostgresUserStore(dsn string) (*PostgresUserStore, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("userstore: ping: %w", err)
 	}
+	configureDBPool(db)
 	s := &PostgresUserStore{db: db}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("userstore: migrate: %w", err)
@@ -173,8 +180,105 @@ func (s *PostgresUserStore) AuthenticateForSubject(ctx context.Context, tenantID
 	return u.Subject, nil
 }
 
+// RegisterForSubject is a convenience adapter that satisfies the
+// oauth.UserRegistrar interface, returning only the subject string.
+func (s *PostgresUserStore) RegisterForSubject(ctx context.Context, tenantID, username, email, password string) (string, error) {
+	u, err := s.Register(ctx, tenantID, username, email, password)
+	if err != nil {
+		return "", err
+	}
+	return u.Subject, nil
+}
+
+// GetByEmail looks up a user by email within a tenant.
+func (s *PostgresUserStore) GetByEmail(ctx context.Context, tenantID, email string) (*User, error) {
+	var u User
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, tenant_id, username, email, password_hash, subject, created_at
+		 FROM users WHERE tenant_id = $1 AND email = $2`,
+		tenantID, email,
+	).Scan(&u.ID, &u.TenantID, &u.Username, &u.Email, &u.PasswordHash, &u.Subject, &u.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.New("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userstore: get by email: %w", err)
+	}
+	return &u, nil
+}
+
+// SetPassword updates a user's password hash (Argon2id) within a tenant.
+func (s *PostgresUserStore) SetPassword(ctx context.Context, tenantID, username, newPasswordHash string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = $1 WHERE tenant_id = $2 AND username = $3`,
+		newPasswordHash, tenantID, username,
+	)
+	if err != nil {
+		return fmt.Errorf("userstore: set password: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+// HashPassword exposes the package's Argon2id hashing for callers (e.g. the
+// password-reset flow) that need to hash a new password before calling
+// SetPassword.
+func HashPassword(password string) (string, error) {
+	return hashPassword(password)
+}
+
+// EmailExists reports whether an account with the given email exists,
+// satisfying oauth.PasswordResetter.
+func (s *PostgresUserStore) EmailExists(ctx context.Context, tenantID, email string) (bool, error) {
+	_, err := s.GetByEmail(ctx, tenantID, email)
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// SetPasswordForEmail hashes and sets a new password for the account with
+// the given email, satisfying oauth.PasswordResetter.
+func (s *PostgresUserStore) SetPasswordForEmail(ctx context.Context, tenantID, email, newPassword string) error {
+	u, err := s.GetByEmail(ctx, tenantID, email)
+	if err != nil {
+		return err
+	}
+	hash, err := hashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.SetPassword(ctx, tenantID, u.Username, hash)
+}
+
 // Close releases the underlying database connection.
 func (s *PostgresUserStore) Close() error { return s.db.Close() }
+
+// Ping verifies the database connection is reachable, for use by readiness
+// checks (e.g. an HTTP /readyz handler). It respects ctx's deadline/cancellation.
+func (s *PostgresUserStore) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
+// configureDBPool applies production-sane connection pool limits to db,
+// overriding Go's defaults (unbounded max-open, no idle timeout) which can
+// otherwise let a single process exhaust the database's connection limit.
+// DILITHIAUTH_DB_MAX_CONNS overrides the max-open-connections default; all
+// other limits are fixed, sensible values for a small-VM deployment.
+func configureDBPool(db *sql.DB) {
+	maxOpen := 25
+	if v := os.Getenv("DILITHIAUTH_DB_MAX_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxOpen = n
+		}
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
+}
 
 // ---------------------------------------------------------------------------
 // Argon2id helpers

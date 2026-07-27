@@ -18,25 +18,46 @@ type RedisSigStore struct {
 }
 
 // RedisSigStoreOption configures optional RedisSigStore parameters.
-type RedisSigStoreOption func(*RedisSigStore)
+type RedisSigStoreOption func(*redisSigStoreConfig)
+
+type redisSigStoreConfig struct {
+	prefix   string
+	ttl      time.Duration
+	username string
+	password string
+}
 
 // WithKeyPrefix sets a custom key prefix (default: "sigstore:").
 func WithKeyPrefix(prefix string) RedisSigStoreOption {
-	return func(r *RedisSigStore) { r.prefix = prefix }
+	return func(c *redisSigStoreConfig) { c.prefix = prefix }
 }
 
 // WithTTL sets an expiration time on stored signatures.
 // Default is 0 (no expiration).
 func WithTTL(ttl time.Duration) RedisSigStoreOption {
-	return func(r *RedisSigStore) { r.ttl = ttl }
+	return func(c *redisSigStoreConfig) { c.ttl = ttl }
+}
+
+// WithAuth sets the Redis ACL username/password used to authenticate the
+// connection. Username may be left empty to authenticate against the
+// legacy single-password `requirepass` scheme instead of a named ACL user.
+func WithAuth(username, password string) RedisSigStoreOption {
+	return func(c *redisSigStoreConfig) { c.username = username; c.password = password }
 }
 
 // NewRedisSigStore creates a RedisSigStore connected to the given Redis address.
 // The addr should be in "host:port" format (e.g. "localhost:6379").
 // It verifies connectivity before returning.
 func NewRedisSigStore(addr string, opts ...RedisSigStoreOption) (*RedisSigStore, error) {
+	cfg := &redisSigStoreConfig{prefix: "sigstore:"}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	client := redis.NewClient(&redis.Options{
-		Addr: addr,
+		Addr:     addr,
+		Username: cfg.username,
+		Password: cfg.password,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -49,10 +70,8 @@ func NewRedisSigStore(addr string, opts ...RedisSigStoreOption) (*RedisSigStore,
 
 	rs := &RedisSigStore{
 		client: client,
-		prefix: "sigstore:",
-	}
-	for _, opt := range opts {
-		opt(rs)
+		prefix: cfg.prefix,
+		ttl:    cfg.ttl,
 	}
 	return rs, nil
 }
@@ -104,4 +123,10 @@ func (r *RedisSigStore) Len() int {
 // Close closes the underlying Redis connection.
 func (r *RedisSigStore) Close() error {
 	return r.client.Close()
+}
+
+// Ping verifies the Redis connection is reachable, for use by readiness
+// checks (e.g. an HTTP /readyz handler). It respects ctx's deadline/cancellation.
+func (r *RedisSigStore) Ping(ctx context.Context) error {
+	return r.client.Ping(ctx).Err()
 }

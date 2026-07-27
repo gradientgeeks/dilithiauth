@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/tenant"
 )
 
 type claimsContextKey struct{}
@@ -35,6 +37,16 @@ func (v *Verifier) Middleware() func(http.Handler) http.Handler {
 			claims, err := v.VerifyJWT(tokenStr)
 			if err != nil {
 				http.Error(w, "invalid token: "+err.Error(), http.StatusUnauthorized)
+				return
+			}
+
+			// Reject a token issued under one tenant if the request resolved
+			// to a different tenant (e.g. via subdomain or a trusted
+			// X-Tenant-Id header) — otherwise a token minted for "alice" in
+			// tenant A would be indistinguishable from tenant B's "alice".
+			requestTenant := tenant.FromContext(r.Context())
+			if claims.TenantID != "" && claims.TenantID != requestTenant {
+				http.Error(w, "invalid token: tenant mismatch", http.StatusForbidden)
 				return
 			}
 

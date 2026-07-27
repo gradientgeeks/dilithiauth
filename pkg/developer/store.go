@@ -9,13 +9,21 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/lib/pq"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
-	_ "github.com/lib/pq"
 )
+
+// ErrAppNotFound is returned by GetApp when no matching row exists, distinct
+// from any other error (e.g. a scan/connection failure) so callers can tell
+// "genuinely doesn't exist" (404) apart from "something went wrong" (500).
+var ErrAppNotFound = errors.New("app not found")
 
 // Argon2id parameters — match pkg/userstore for consistency.
 const (
@@ -28,10 +36,11 @@ const (
 
 // Developer represents a registered developer account.
 type Developer struct {
-	ID        string
-	Email     string
-	Name      string
-	CreatedAt time.Time
+	ID            string
+	Email         string
+	Name          string
+	EmailVerified bool
+	CreatedAt     time.Time
 }
 
 // OAuthApp represents a developer's registered OAuth application.
@@ -48,6 +57,178 @@ type OAuthApp struct {
 	SecretRotatedAt *time.Time
 }
 
+// DevStore defines the storage interface for developer accounts and OAuth apps.
+type DevStore interface {
+	RegisterDeveloper(ctx context.Context, email, name, password string) (*Developer, error)
+	MarkEmailVerified(ctx context.Context, email string) error
+	AuthenticateDeveloper(ctx context.Context, email, password string) (*Developer, error)
+	GetDeveloperByEmail(ctx context.Context, email string) (*Developer, error)
+	CreateApp(ctx context.Context, developerID, name, description, homepageURL string, redirectURIs []string, isPublic bool) (*OAuthApp, string, error)
+	RotateSecret(ctx context.Context, developerID, appID string) (*OAuthApp, string, error)
+	ListApps(ctx context.Context, developerID string) ([]*OAuthApp, error)
+	GetApp(ctx context.Context, developerID, appID string) (*OAuthApp, error)
+	DeleteApp(ctx context.Context, developerID, appID string) error
+}
+
+// MemoryDevStore provides an in-memory implementation of DevStore.
+type MemoryDevStore struct {
+	mu   sync.RWMutex
+	devs map[string]*Developer // email -> Developer
+	pwd  map[string]string     // email -> argon2 hash
+	apps map[string]*OAuthApp  // appID -> OAuthApp
+}
+
+// NewMemoryDevStore creates an in-memory developer store.
+func NewMemoryDevStore() *MemoryDevStore {
+	return &MemoryDevStore{
+		devs: make(map[string]*Developer),
+		pwd:  make(map[string]string),
+		apps: make(map[string]*OAuthApp),
+	}
+}
+
+func (m *MemoryDevStore) RegisterDeveloper(ctx context.Context, email, name, password string) (*Developer, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" || name == "" || password == "" {
+		return nil, errors.New("email, name, and password are required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.devs[email]; exists {
+		return nil, errors.New("an account with this email already exists")
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+	dev := &Developer{
+		ID:        mustRandomHex(16),
+		Email:     email,
+		Name:      name,
+		CreatedAt: time.Now(),
+	}
+	m.devs[email] = dev
+	m.pwd[email] = hash
+	return dev, nil
+}
+
+func (m *MemoryDevStore) MarkEmailVerified(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if dev, ok := m.devs[email]; ok {
+		dev.EmailVerified = true
+	}
+	return nil
+}
+
+func (m *MemoryDevStore) AuthenticateDeveloper(ctx context.Context, email, password string) (*Developer, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	m.mu.RLock()
+	dev, ok := m.devs[email]
+	hash := m.pwd[email]
+	m.mu.RUnlock()
+
+	if !ok {
+		// Dummy verify keeps timing consistent regardless of whether the
+		// account exists, matching the Postgres-backed Store's behavior —
+		// otherwise a missing-account response returns measurably faster
+		// than a wrong-password response, letting callers enumerate emails.
+		_ = verifyPassword(password, dummyPasswordHash)
+		return nil, errors.New("invalid email or password")
+	}
+	if !verifyPassword(password, hash) {
+		return nil, errors.New("invalid email or password")
+	}
+	return dev, nil
+}
+
+func (m *MemoryDevStore) GetDeveloperByEmail(ctx context.Context, email string) (*Developer, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dev, ok := m.devs[email]
+	if !ok {
+		return nil, errors.New("developer not found")
+	}
+	return dev, nil
+}
+
+func (m *MemoryDevStore) CreateApp(ctx context.Context, developerID, name, description, homepageURL string, redirectURIs []string, isPublic bool) (*OAuthApp, string, error) {
+	if name == "" || len(redirectURIs) == 0 {
+		return nil, "", errors.New("app name and redirect URIs are required")
+	}
+	id := mustRandomHex(16)
+	clientID := "da_" + mustRandomHex(16)
+	var secret, secretHash string
+	if !isPublic {
+		secret = "dacs_" + mustRandomHex(32)
+		h, _ := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+		secretHash = string(h)
+	}
+
+	app := &OAuthApp{
+		ID:           id,
+		DeveloperID:  developerID,
+		Name:         name,
+		Description:  description,
+		HomepageURL:  homepageURL,
+		ClientID:     clientID,
+		RedirectURIs: redirectURIs,
+		IsPublic:     isPublic,
+		CreatedAt:    time.Now(),
+	}
+	m.mu.Lock()
+	m.apps[id] = app
+	m.mu.Unlock()
+	_ = secretHash
+	return app, secret, nil
+}
+
+func (m *MemoryDevStore) RotateSecret(ctx context.Context, developerID, appID string) (*OAuthApp, string, error) {
+	app, err := m.GetApp(ctx, developerID, appID)
+	if err != nil {
+		return nil, "", err
+	}
+	secret := "dacs_" + mustRandomHex(32)
+	now := time.Now()
+	app.SecretRotatedAt = &now
+	return app, secret, nil
+}
+
+func (m *MemoryDevStore) ListApps(ctx context.Context, developerID string) ([]*OAuthApp, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var res []*OAuthApp
+	for _, app := range m.apps {
+		if app.DeveloperID == developerID {
+			res = append(res, app)
+		}
+	}
+	return res, nil
+}
+
+func (m *MemoryDevStore) GetApp(ctx context.Context, developerID, appID string) (*OAuthApp, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	app, ok := m.apps[appID]
+	if !ok || app.DeveloperID != developerID {
+		return nil, ErrAppNotFound
+	}
+	return app, nil
+}
+
+func (m *MemoryDevStore) DeleteApp(ctx context.Context, developerID, appID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	app, ok := m.apps[appID]
+	if !ok || app.DeveloperID != developerID {
+		return ErrAppNotFound
+	}
+	delete(m.apps, appID)
+	return nil
+}
+
 // Store manages developer accounts and OAuth app registrations in PostgreSQL.
 type Store struct {
 	db *sql.DB
@@ -62,6 +243,7 @@ func NewStore(dsn string) (*Store, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("developer: ping db: %w", err)
 	}
+	configureDBPool(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("developer: migrate: %w", err)
@@ -76,8 +258,10 @@ func (s *Store) migrate() error {
 			email          TEXT UNIQUE NOT NULL,
 			password_hash  TEXT NOT NULL,
 			name           TEXT NOT NULL,
+			email_verified BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE developer_accounts ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
 
 		CREATE TABLE IF NOT EXISTS oauth_apps (
 			id                 TEXT PRIMARY KEY,
@@ -110,9 +294,9 @@ func (s *Store) RegisterDeveloper(ctx context.Context, email, name, password str
 		return nil, fmt.Errorf("developer: hash password: %w", err)
 	}
 	id := mustRandomHex(16)
-	dev := &Developer{ID: id, Email: email, Name: name}
+	dev := &Developer{ID: id, Email: email, Name: name, EmailVerified: false}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO developer_accounts (id, email, password_hash, name) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO developer_accounts (id, email, password_hash, name, email_verified) VALUES ($1, $2, $3, $4, FALSE)`,
 		id, email, hash, name,
 	)
 	if err != nil {
@@ -122,6 +306,13 @@ func (s *Store) RegisterDeveloper(ctx context.Context, email, name, password str
 		return nil, fmt.Errorf("developer: register: %w", err)
 	}
 	return dev, nil
+}
+
+// MarkEmailVerified updates email_verified = TRUE for a developer account.
+func (s *Store) MarkEmailVerified(ctx context.Context, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	_, err := s.db.ExecContext(ctx, `UPDATE developer_accounts SET email_verified = TRUE WHERE email = $1`, email)
+	return err
 }
 
 // AuthenticateDeveloper verifies email and password, returning the Developer on success.
@@ -135,7 +326,7 @@ func (s *Store) AuthenticateDeveloper(ctx context.Context, email, password strin
 	).Scan(&dev.ID, &dev.Email, &dev.Name, &hash, &dev.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Dummy verify keeps timing consistent regardless of whether account exists.
-		_ = verifyPassword(password, "0000000000000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000")
+		_ = verifyPassword(password, dummyPasswordHash)
 		return nil, errors.New("invalid email or password")
 	}
 	if err != nil {
@@ -143,6 +334,25 @@ func (s *Store) AuthenticateDeveloper(ctx context.Context, email, password strin
 	}
 	if !verifyPassword(password, hash) {
 		return nil, errors.New("invalid email or password")
+	}
+	return &dev, nil
+}
+
+// GetDeveloperByEmail looks up a developer account by email without
+// authenticating a password. Used when a flow (e.g. email verification)
+// needs the developer's real persisted ID rather than fabricating one.
+func (s *Store) GetDeveloperByEmail(ctx context.Context, email string) (*Developer, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	var dev Developer
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, email, name, email_verified, created_at FROM developer_accounts WHERE email = $1`,
+		email,
+	).Scan(&dev.ID, &dev.Email, &dev.Name, &dev.EmailVerified, &dev.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.New("developer not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("developer: get by email: %w", err)
 	}
 	return &dev, nil
 }
@@ -177,14 +387,14 @@ func (s *Store) CreateApp(ctx context.Context, developerID, name, description, h
 	}
 
 	app := &OAuthApp{
-		ID:          id,
-		DeveloperID: developerID,
-		Name:        name,
-		Description: description,
-		HomepageURL: homepageURL,
-		ClientID:    clientID,
+		ID:           id,
+		DeveloperID:  developerID,
+		Name:         name,
+		Description:  description,
+		HomepageURL:  homepageURL,
+		ClientID:     clientID,
 		RedirectURIs: redirectURIs,
-		IsPublic:    isPublic,
+		IsPublic:     isPublic,
 	}
 
 	_, err := s.db.ExecContext(ctx,
@@ -192,7 +402,7 @@ func (s *Store) CreateApp(ctx context.Context, developerID, name, description, h
 		 (id, developer_id, name, description, homepage_url, client_id, client_secret_hash, redirect_uris, is_public)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		id, developerID, name, description, homepageURL,
-		clientID, secretHash, redirectURIs, isPublic,
+		clientID, secretHash, pq.Array(redirectURIs), isPublic,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("developer: create app: %w", err)
@@ -246,7 +456,7 @@ func (s *Store) ListApps(ctx context.Context, developerID string) ([]*OAuthApp, 
 	for rows.Next() {
 		app := &OAuthApp{DeveloperID: developerID}
 		if err := rows.Scan(&app.ID, &app.Name, &app.Description, &app.HomepageURL,
-			&app.ClientID, &app.RedirectURIs, &app.IsPublic, &app.CreatedAt, &app.SecretRotatedAt); err != nil {
+			&app.ClientID, pq.Array(&app.RedirectURIs), &app.IsPublic, &app.CreatedAt, &app.SecretRotatedAt); err != nil {
 			return nil, fmt.Errorf("developer: scan app: %w", err)
 		}
 		apps = append(apps, app)
@@ -262,9 +472,9 @@ func (s *Store) GetApp(ctx context.Context, developerID, appID string) (*OAuthAp
 		 FROM oauth_apps WHERE id = $1 AND developer_id = $2`,
 		appID, developerID,
 	).Scan(&app.Name, &app.Description, &app.HomepageURL, &app.ClientID,
-		&app.RedirectURIs, &app.IsPublic, &app.CreatedAt, &app.SecretRotatedAt)
+		pq.Array(&app.RedirectURIs), &app.IsPublic, &app.CreatedAt, &app.SecretRotatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("app not found")
+		return nil, ErrAppNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("developer: get app: %w", err)
@@ -282,12 +492,36 @@ func (s *Store) DeleteApp(ctx context.Context, developerID, appID string) error 
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return errors.New("app not found")
+		return ErrAppNotFound
 	}
 	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// Ping verifies the database connection is reachable, for use by readiness
+// checks (e.g. an HTTP /readyz handler). It respects ctx's deadline/cancellation.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
+// configureDBPool applies production-sane connection pool limits to db,
+// overriding Go's defaults (unbounded max-open, no idle timeout) which can
+// otherwise let a single process exhaust the database's connection limit.
+// DILITHIAUTH_DB_MAX_CONNS overrides the max-open-connections default; all
+// other limits are fixed, sensible values for a small-VM deployment.
+func configureDBPool(db *sql.DB) {
+	maxOpen := 25
+	if v := os.Getenv("DILITHIAUTH_DB_MAX_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxOpen = n
+		}
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
+}
 
 // --- helpers ---
 
@@ -298,6 +532,12 @@ func mustRandomHex(n int) string {
 	}
 	return hex.EncodeToString(b)
 }
+
+// dummyPasswordHash is a syntactically valid (but not password-derived)
+// salt:hash pair run through verifyPassword when an account lookup misses,
+// so a nonexistent-account response takes the same time as a wrong-password
+// response for an existing account.
+const dummyPasswordHash = "0000000000000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000"
 
 func hashPassword(password string) (string, error) {
 	salt := make([]byte, saltLen)

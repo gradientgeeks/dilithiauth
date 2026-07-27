@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/transport"
 )
@@ -88,6 +89,41 @@ func TestFileSigStore_EmptyFileBootstrap(t *testing.T) {
 
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("expected file to exist after first write: %v", err)
+	}
+}
+
+func TestFileSigStore_WithTTL_ExpiresAndPurges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sigstore.json")
+	fs, err := transport.NewFileSigStoreWithTTL(path, 10*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewFileSigStoreWithTTL() error = %v", err)
+	}
+	fs.Put("jti-1", []byte("sig-1"))
+
+	if _, ok := fs.Get("jti-1"); !ok {
+		t.Fatal("entry should be readable immediately after Put")
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	if _, ok := fs.Get("jti-1"); ok {
+		t.Error("expired entry should no longer be returned by Get, even before Purge runs")
+	}
+	if fs.Len() != 1 {
+		t.Fatalf("Len() = %d, want 1 before Purge", fs.Len())
+	}
+
+	fs.Purge()
+	if fs.Len() != 0 {
+		t.Errorf("Len() = %d, want 0 after Purge", fs.Len())
+	}
+
+	// Purge's flush must also be reflected on disk.
+	fs2, err := transport.NewFileSigStoreWithTTL(path, 10*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewFileSigStoreWithTTL() error = %v", err)
+	}
+	if fs2.Len() != 0 {
+		t.Errorf("reloaded Len() = %d, want 0 (Purge should have flushed to disk)", fs2.Len())
 	}
 }
 

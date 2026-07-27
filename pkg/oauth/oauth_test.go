@@ -102,7 +102,7 @@ func TestJWKSHandler(t *testing.T) {
 
 func TestIssueJWTThin(t *testing.T) {
 	p := newProvider(t)
-	result, err := p.IssueJWTThin("alice", time.Hour)
+	result, err := p.IssueJWTThin("default", "alice", time.Hour)
 	if err != nil {
 		t.Fatalf("IssueJWTThin() error = %v", err)
 	}
@@ -151,7 +151,7 @@ func TestIssueJWTThin(t *testing.T) {
 
 func TestIssueJWTFull(t *testing.T) {
 	p := newProvider(t)
-	tokenStr, err := p.IssueJWTFull("bob", time.Hour)
+	tokenStr, err := p.IssueJWTFull("default", "bob", time.Hour)
 	if err != nil {
 		t.Fatalf("IssueJWTFull() error = %v", err)
 	}
@@ -181,7 +181,7 @@ func TestIssueJWTFull(t *testing.T) {
 
 func TestIssueCWT(t *testing.T) {
 	p := newProvider(t)
-	result, err := p.IssueCWT("charlie", time.Hour)
+	result, err := p.IssueCWT("default", "charlie", time.Hour)
 	if err != nil {
 		t.Fatalf("IssueCWT() error = %v", err)
 	}
@@ -202,12 +202,12 @@ func TestIssueCWT(t *testing.T) {
 func TestCWTSmallerThanJWT(t *testing.T) {
 	p := newProvider(t)
 
-	cwtResult, err := p.IssueCWT("dave", time.Hour)
+	cwtResult, err := p.IssueCWT("default", "dave", time.Hour)
 	if err != nil {
 		t.Fatalf("IssueCWT() error = %v", err)
 	}
 
-	jwtResult, err := p.IssueJWTThin("dave", time.Hour)
+	jwtResult, err := p.IssueJWTThin("default", "dave", time.Hour)
 	if err != nil {
 		t.Fatalf("IssueJWTThin() error = %v", err)
 	}
@@ -227,7 +227,7 @@ func TestCWTSmallerThanJWT(t *testing.T) {
 
 func TestKeyManagerProvider_IssueJWTThin(t *testing.T) {
 	p := newKeyManagerProvider(t)
-	result, err := p.IssueJWTThin("alice", time.Hour)
+	result, err := p.IssueJWTThin("default", "alice", time.Hour)
 	if err != nil {
 		t.Fatalf("IssueJWTThin() error = %v", err)
 	}

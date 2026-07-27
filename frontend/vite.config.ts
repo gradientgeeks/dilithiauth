@@ -5,11 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': 'https://dilithiauthapis.gradientgeeks.tech',
     },
   },
   build: {
-    outDir: '../cmd/server/static',
+    outDir: 'dist',
     emptyOutDir: true,
   },
 })

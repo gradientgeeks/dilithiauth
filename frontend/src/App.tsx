@@ -22,7 +22,7 @@ function RequireGuest({ children }: { children: React.ReactElement }) {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename="/developer">
+      <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASENAME || ''}>
         <Routes>
           <Route path="/" element={<RequireGuest><Landing /></RequireGuest>} />
           <Route path="/login" element={<RequireGuest><Login /></RequireGuest>} />

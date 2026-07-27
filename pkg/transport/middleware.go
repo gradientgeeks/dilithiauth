@@ -92,6 +92,57 @@ func (s *SigStore) Len() int {
 	return s.backend.Len()
 }
 
+// sigStorePurger is implemented by backends that support purging expired
+// entries (MemorySigStore, FileSigStore, PostgresSigStore). RedisSigStore
+// doesn't need it — Redis expires keys natively via WithTTL.
+type sigStorePurger interface {
+	Purge()
+}
+
+// Purge removes expired entries from the backend, if it supports purging.
+// A no-op for backends without an expiry concept. Call periodically (e.g.
+// hourly) from a background goroutine to bound memory/disk/DB growth.
+func (s *SigStore) Purge() {
+	if p, ok := s.backend.(sigStorePurger); ok {
+		p.Purge()
+	}
+}
+
+// sigStorePinger is implemented by backends with an external dependency to
+// check (PostgresSigStore, RedisSigStore). In-memory/file backends have
+// nothing to ping, so they're simply not asserted to this interface.
+type sigStorePinger interface {
+	Ping(ctx context.Context) error
+}
+
+// Ping reports whether the backend's external dependency (if any) is
+// reachable, for use by readiness checks (e.g. an HTTP /readyz handler). It
+// returns nil for backends with no external dependency (in-memory, file).
+func (s *SigStore) Ping(ctx context.Context) error {
+	if p, ok := s.backend.(sigStorePinger); ok {
+		return p.Ping(ctx)
+	}
+	return nil
+}
+
+// sigStoreCloser is implemented by backends holding an external connection
+// that should be released on shutdown (PostgresSigStore via *sql.DB,
+// RedisSigStore via *redis.Client). In-memory/file backends have nothing to
+// close, so they're simply not asserted to this interface.
+type sigStoreCloser interface {
+	Close() error
+}
+
+// Close releases the backend's underlying connection, if any, for use during
+// graceful shutdown. A no-op for backends with no external connection
+// (in-memory, file).
+func (s *SigStore) Close() error {
+	if c, ok := s.backend.(sigStoreCloser); ok {
+		return c.Close()
+	}
+	return nil
+}
+
 // -------------------------------------------------------------------
 // Context helpers
 // -------------------------------------------------------------------

@@ -40,6 +40,12 @@ func NewRedisAuthzStore(redisAddr string) (*RedisAuthzStore, error) {
 	}, nil
 }
 
+// Ping verifies the Redis connection is reachable, for use by readiness
+// checks (e.g. an HTTP /readyz handler). It respects ctx's deadline/cancellation.
+func (s *RedisAuthzStore) Ping(ctx context.Context) error {
+	return s.client.Ping(ctx).Err()
+}
+
 func (s *RedisAuthzStore) AddUser(tenantID string, u *User) {
 	s.mem.AddUser(tenantID, u)
 }
@@ -56,12 +62,28 @@ func (s *RedisAuthzStore) AuthenticateUser(tenantID, username, password string) 
 	return s.mem.AuthenticateUser(tenantID, username, password)
 }
 
+func (s *RedisAuthzStore) GetUserBySubject(tenantID, subject string) (*User, error) {
+	return s.mem.GetUserBySubject(tenantID, subject)
+}
+
+func (s *RedisAuthzStore) GetUserByEmail(tenantID, email string) (*User, error) {
+	return s.mem.GetUserByEmail(tenantID, email)
+}
+
+func (s *RedisAuthzStore) SetPassword(tenantID, username, newPasswordHash string) error {
+	return s.mem.SetPassword(tenantID, username, newPasswordHash)
+}
+
 func (s *RedisAuthzStore) ValidateClient(tenantID, clientID, redirectURI string) (*OAuthClient, error) {
 	return s.mem.ValidateClient(tenantID, clientID, redirectURI)
 }
 
 func (s *RedisAuthzStore) ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI string) (*OAuthClient, error) {
 	return s.mem.ValidateClientWithSecret(tenantID, clientID, clientSecret, redirectURI)
+}
+
+func (s *RedisAuthzStore) ValidateClientSecretOnly(tenantID, clientID, clientSecret string) (*OAuthClient, error) {
+	return s.mem.ValidateClientSecretOnly(tenantID, clientID, clientSecret)
 }
 
 // CreateCode generates and stores an authorization code in Redis, scoped by tenantID.

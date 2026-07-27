@@ -1,0 +1,27 @@
+{
+  "name": "dilithiauth-js",
+  "version": "1.0.0",
+  "description": "DilithiAuth Post-Quantum Identity Client SDK for JavaScript and TypeScript",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "dilithiauth",
+    "auth0",
+    "post-quantum",
+    "ml-dsa",
+    "dilithium",
+    "ed25519",
+    "oauth2",
+    "pkce",
+    "oidc"
+  ],
+  "author": "DilithiAuth",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
