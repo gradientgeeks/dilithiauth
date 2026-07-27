@@ -165,4 +165,4 @@ jobs:
       - name: Index on proxy.golang.org
         run: |
           TAG_NAME="${GITHUB_REF_NAME}"
-          go list -m "github.com/Uttam-Mahata/DilithiAuth/sdk/go@${TAG_NAME}" || true
+          go list -m "github.com/Uttam-Mahata/dilithiauth-go@${TAG_NAME}" || true

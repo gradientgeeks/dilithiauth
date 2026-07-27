@@ -81,15 +81,15 @@ console.log('Email:', userInfo.email);`
     id: 'go',
     name: 'Go',
     badge: 'go get',
-    installCmd: 'go get github.com/Uttam-Mahata/DilithiAuth/sdk/go',
+    installCmd: 'go get github.com/Uttam-Mahata/dilithiauth-go',
     manifestFile: 'go.mod',
-    manifestContent: `module myapp\n\ngo 1.24\n\nrequire github.com/Uttam-Mahata/DilithiAuth/sdk/go v1.0.0`,
+    manifestContent: `module myapp\n\ngo 1.24\n\nrequire github.com/Uttam-Mahata/dilithiauth-go v1.0.0`,
     pkceCode: `package main
 
 import (
 	"fmt"
 	"log"
-	"github.com/Uttam-Mahata/DilithiAuth/sdk/go"
+	"github.com/Uttam-Mahata/dilithiauth-go"
 )
 
 func main() {
@@ -106,7 +106,7 @@ func main() {
 
 import (
 	"fmt"
-	"github.com/Uttam-Mahata/DilithiAuth/sdk/go"
+	"github.com/Uttam-Mahata/dilithiauth-go"
 )
 
 func main() {

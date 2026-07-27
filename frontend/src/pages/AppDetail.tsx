@@ -130,13 +130,13 @@ await authClient.loginWithRedirect();
 const { user, accessToken, pqcRef } = await authClient.handleRedirectCallback();
 console.log('User claims:', user);`,
 
-    go: `// Install SDK: go get github.com/Uttam-Mahata/DilithiAuth/sdk/go
+    go: `// Install SDK: go get github.com/Uttam-Mahata/dilithiauth-go
 package main
 
 import (
     "context"
     "fmt"
-    dilithiauth "github.com/Uttam-Mahata/DilithiAuth/sdk/go"
+    dilithiauth "github.com/Uttam-Mahata/dilithiauth-go"
 )
 
 func main() {
