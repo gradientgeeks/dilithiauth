@@ -295,6 +295,14 @@ func main() {
 		fatal("generating consent secret", "error", err)
 	}
 
+	googleClientID := getEnv("DILITHIAUTH_GOOGLE_CLIENT_ID", "")
+	googleClientSecret := getEnv("DILITHIAUTH_GOOGLE_CLIENT_SECRET", "")
+	googleRedirectURI := getEnv("DILITHIAUTH_GOOGLE_REDIRECT_URI", issuer+"/auth/social/google/callback")
+
+	githubClientID := getEnv("DILITHIAUTH_GITHUB_CLIENT_ID", "")
+	githubClientSecret := getEnv("DILITHIAUTH_GITHUB_CLIENT_SECRET", "")
+	githubRedirectURI := getEnv("DILITHIAUTH_GITHUB_REDIRECT_URI", issuer+"/auth/social/github/callback")
+
 	authzHandlers := &oauth.AuthzHandlers{
 		Provider:      provider,
 		Store:         authzStore,
@@ -304,6 +312,16 @@ func main() {
 		RefreshTokens: refreshTokenStore,
 		GrantStore:    oauth.NewMemoryGrantStore(),
 		ConsentSecret: consentSecret,
+		GoogleConfig: oauth.SocialConfig{
+			ClientID:     googleClientID,
+			ClientSecret: googleClientSecret,
+			RedirectURI:  googleRedirectURI,
+		},
+		GitHubConfig: oauth.SocialConfig{
+			ClientID:     githubClientID,
+			ClientSecret: githubClientSecret,
+			RedirectURI:  githubRedirectURI,
+		},
 	}
 	if pgAuthz != nil {
 		authzHandlers.ClientValidator = &oauth.CompositeClientValidator{
@@ -464,6 +482,10 @@ func main() {
 		r.With(rl(ratelimit.NewLimiter(1.0/5, 5))).Post("/reset-password", authzHandlers.ResetPasswordPOST)
 		r.With(rl(ratelimit.NewLimiter(1.0/2, 10))).Post("/consent", authzHandlers.ConsentPOST)
 		r.With(rl(ratelimit.NewLimiter(2, 20))).Post("/token", authzHandlers.TokenExchange)
+
+		// Social Authentication endpoints.
+		r.Get("/auth/social/{provider}", authzHandlers.SocialLoginGET)
+		r.Get("/auth/social/{provider}/callback", authzHandlers.SocialCallbackGET)
 
 		// Token revocation endpoint (RFC 7009).
 		r.With(rl(ratelimit.NewLimiter(2, 20))).Post("/revoke", authzHandlers.RevokeToken)

@@ -11,6 +11,12 @@
 | `DILITHIAUTH_POSTGRES_DSN` | `postgres://localhost:5432/dilithiauth?sslmode=disable` | PostgreSQL connection string |
 | `DILITHIAUTH_REDIS_ADDR` | `localhost:6379` | Redis address (host:port) |
 | `DILITHIAUTH_KEYS_DIR` | *(empty)* | Directory for persistent key storage. Empty = ephemeral keys. |
+| `DILITHIAUTH_GOOGLE_CLIENT_ID` | *(empty)* | Google OAuth2 Client ID for Social Authentication |
+| `DILITHIAUTH_GOOGLE_CLIENT_SECRET` | *(empty)* | Google OAuth2 Client Secret for Social Authentication |
+| `DILITHIAUTH_GOOGLE_REDIRECT_URI` | `issuer + "/auth/social/google/callback"` | Google OAuth2 Callback Redirect URI |
+| `DILITHIAUTH_GITHUB_CLIENT_ID` | *(empty)* | GitHub OAuth2 Client ID for Social Authentication |
+| `DILITHIAUTH_GITHUB_CLIENT_SECRET` | *(empty)* | GitHub OAuth2 Client Secret for Social Authentication |
+| `DILITHIAUTH_GITHUB_REDIRECT_URI` | `issuer + "/auth/social/github/callback"` | GitHub OAuth2 Callback Redirect URI |
 
 ## Deployment Topology
 
@@ -92,6 +98,8 @@ http {
 | `POST` | `/token/cwt` | Issue CBOR Web Token |
 | `GET` | `/authorize` | OAuth 2.0 authorization endpoint (login form) |
 | `POST` | `/authorize` | Process login and redirect with authorization code |
+| `GET` | `/auth/social/{provider}` | Initiate social login redirect (google, github) |
+| `GET` | `/auth/social/{provider}/callback` | Social login OAuth callback handler |
 | `POST` | `/token` | OAuth 2.0 token exchange (authorization_code grant) |
 | `POST` | `/admin/rotate` | Rotate signing keys (requires `DILITHIAUTH_KEYS_DIR`) |
 | `GET` | `/protected/whoami` | Protected endpoint — returns verified claims |

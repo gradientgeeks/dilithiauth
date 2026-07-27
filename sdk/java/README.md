@@ -4,6 +4,24 @@
 
 Java client library for integrating **DilithiAuth** into Spring Boot, Jakarta EE, and Java backend applications. Supports **OAuth 2.0 PKCE S256 Authorization Code Flow** and **Post-Quantum Hybrid Tokens**.
 
+## 📦 Installation (Maven / Gradle via JitPack)
+
+### Maven (`pom.xml`)
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>com.github.Uttam-Mahata</groupId>
+    <artifactId>dilithiauth-java</artifactId>
+    <version>1.0.1</version>
+</dependency>
+```
+
 ---
 
 ## 🚀 Quick Start (Java / Spring Boot)

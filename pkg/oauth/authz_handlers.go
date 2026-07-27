@@ -2,17 +2,22 @@ package oauth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/tenant"
+	"github.com/Uttam-Mahata/DilithiAuth/pkg/userstore"
 )
 
 // SigStorePutter is the interface for storing PQC signatures, satisfied by
@@ -109,6 +114,8 @@ type AuthzHandlers struct {
 	RefreshTTL       time.Duration     // refresh token lifetime; defaults to 30 days if zero
 	GrantStore       GrantStore        // optional; enables the first-time-only consent screen when set
 	ConsentSecret    []byte            // required when GrantStore is set; signs short-lived consent tickets
+	GoogleConfig     SocialConfig      // Google OAuth2 credentials
+	GitHubConfig     SocialConfig      // GitHub OAuth2 credentials
 }
 
 // refreshTTL returns the configured refresh token lifetime, or a 30-day default.
@@ -1219,4 +1226,318 @@ func (h *AuthzHandlers) VerifyJWTPOST(w http.ResponseWriter, r *http.Request) {
 		"jti":     claims.TokenID,
 		"exp":     claims.ExpiresAt.Unix(),
 	})
+}
+
+type socialStateClaims struct {
+	jwt.RegisteredClaims
+	ClientID            string `json:"client_id"`
+	RedirectURI         string `json:"redirect_uri"`
+	ClientState         string `json:"client_state"`
+	Scope               string `json:"scope"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+	Provider            string `json:"provider"`
+	Nonce               string `json:"nonce"`
+	TenantID            string `json:"tenant_id,omitempty"`
+}
+
+func (h *AuthzHandlers) socialSecret() []byte {
+	if len(h.ConsentSecret) > 0 {
+		return h.ConsentSecret
+	}
+	return []byte("dilithiauth-default-social-state-secret")
+}
+
+func (h *AuthzHandlers) signSocialState(c socialStateClaims) (string, error) {
+	nonceBytes := make([]byte, 16)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", err
+	}
+	c.Nonce = hex.EncodeToString(nonceBytes)
+	c.RegisteredClaims = jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
+	return tok.SignedString(h.socialSecret())
+}
+
+func (h *AuthzHandlers) parseSocialState(raw string) (*socialStateClaims, error) {
+	tok, err := jwt.ParseWithClaims(raw, &socialStateClaims{}, func(t *jwt.Token) (any, error) {
+		return h.socialSecret(), nil
+	}, jwt.WithValidMethods([]string{"HS256"}))
+	if err != nil || !tok.Valid {
+		return nil, fmt.Errorf("invalid or expired social state")
+	}
+	claims, ok := tok.Claims.(*socialStateClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid social state claims")
+	}
+	return claims, nil
+}
+
+// SocialLoginGET initiates social login flow by building state and redirecting to provider.
+func (h *AuthzHandlers) SocialLoginGET(w http.ResponseWriter, r *http.Request) {
+	providerStr := chi.URLParam(r, "provider")
+	provider := SocialProvider(providerStr)
+
+	clientID := r.URL.Query().Get("client_id")
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	scope := r.URL.Query().Get("scope")
+	clientState := r.URL.Query().Get("state")
+	codeChallenge := r.URL.Query().Get("code_challenge")
+	codeChallengeMethod := r.URL.Query().Get("code_challenge_method")
+
+	if clientID == "" || redirectURI == "" {
+		http.Error(w, "missing client_id or redirect_uri", http.StatusBadRequest)
+		return
+	}
+
+	tenantID := tenant.FromContext(r.Context())
+	_, err := h.clientValidator().ValidateClient(tenantID, clientID, redirectURI)
+	if err != nil {
+		http.Error(w, "invalid client: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var cfg SocialConfig
+	switch provider {
+	case ProviderGoogle:
+		cfg = h.GoogleConfig
+	case ProviderGitHub:
+		cfg = h.GitHubConfig
+	default:
+		http.Error(w, "unsupported social provider", http.StatusBadRequest)
+		return
+	}
+
+	if cfg.ClientID == "" || cfg.ClientSecret == "" {
+		http.Error(w, fmt.Sprintf("social authentication with %s is unconfigured on this server", provider), http.StatusBadRequest)
+		return
+	}
+
+	signedState, err := h.signSocialState(socialStateClaims{
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		ClientState:         clientState,
+		Scope:               scope,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		Provider:            string(provider),
+		TenantID:            tenantID,
+	})
+	if err != nil {
+		http.Error(w, "failed to generate state", http.StatusInternalServerError)
+		return
+	}
+
+	authURL, err := GetSocialAuthURL(provider, cfg, signedState)
+	if err != nil {
+		http.Error(w, "failed to build social auth url: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// SocialCallbackGET handles OAuth callback from provider, provisions identity, and issues IdP auth code.
+func (h *AuthzHandlers) SocialCallbackGET(w http.ResponseWriter, r *http.Request) {
+	providerStr := chi.URLParam(r, "provider")
+	provider := SocialProvider(providerStr)
+
+	providerErr := r.URL.Query().Get("error")
+	stateStr := r.URL.Query().Get("state")
+	code := r.URL.Query().Get("code")
+
+	if providerErr != "" {
+		errDesc := r.URL.Query().Get("error_description")
+		if stateStr != "" {
+			if stateClaims, err := h.parseSocialState(stateStr); err == nil && stateClaims.RedirectURI != "" {
+				u, parseErr := url.Parse(stateClaims.RedirectURI)
+				if parseErr == nil {
+					q := u.Query()
+					q.Set("error", providerErr)
+					if errDesc != "" {
+						q.Set("error_description", errDesc)
+					}
+					if stateClaims.ClientState != "" {
+						q.Set("state", stateClaims.ClientState)
+					}
+					u.RawQuery = q.Encode()
+					http.Redirect(w, r, u.String(), http.StatusFound)
+					return
+				}
+			}
+		}
+		errMsg := "provider error: " + providerErr
+		if errDesc != "" {
+			errMsg += ": " + errDesc
+		}
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+
+	if stateStr == "" || code == "" {
+		http.Error(w, "missing state or code", http.StatusBadRequest)
+		return
+	}
+
+	stateClaims, err := h.parseSocialState(stateStr)
+	if err != nil {
+		http.Error(w, "invalid or expired state: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if stateClaims.Provider != string(provider) {
+		http.Error(w, "provider mismatch in state", http.StatusBadRequest)
+		return
+	}
+
+	tenantID := tenant.FromContext(r.Context())
+	if stateClaims.TenantID != "" {
+		if tenantID == tenant.DefaultTenantID {
+			tenantID = stateClaims.TenantID
+			r = r.WithContext(tenant.WithTenant(r.Context(), tenantID))
+		} else if stateClaims.TenantID != tenantID {
+			http.Error(w, "tenant mismatch in state", http.StatusBadRequest)
+			return
+		}
+	}
+
+	var cfg SocialConfig
+	switch provider {
+	case ProviderGoogle:
+		cfg = h.GoogleConfig
+	case ProviderGitHub:
+		cfg = h.GitHubConfig
+	default:
+		http.Error(w, "unsupported social provider", http.StatusBadRequest)
+		return
+	}
+
+	socialUser, err := ExchangeSocialCode(r.Context(), provider, cfg, code)
+	if err != nil {
+		http.Error(w, "social auth code exchange failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if socialUser == nil || socialUser.Email == "" {
+		http.Error(w, "failed to obtain user email from social provider", http.StatusBadRequest)
+		return
+	}
+
+	// Look up user by email in h.UserStore or h.Store
+	var userSubject string
+
+	if h.UserStore != nil {
+		if getter, ok := h.UserStore.(interface {
+			GetByEmail(ctx context.Context, tenantID, email string) (*userstore.User, error)
+		}); ok {
+			if u, uerr := getter.GetByEmail(r.Context(), tenantID, socialUser.Email); uerr == nil && u != nil {
+				userSubject = u.Subject
+			}
+		}
+	}
+
+	if userSubject == "" && h.Store != nil {
+		if u, uerr := h.Store.GetUserByEmail(tenantID, socialUser.Email); uerr == nil && u != nil {
+			userSubject = u.Subject
+		}
+	}
+
+	// If user does not exist, provision user with a new Subject (usr_<16hex_rand>), email, and name.
+	if userSubject == "" {
+		randBytes := make([]byte, 8)
+		rand.Read(randBytes)
+		userSubject = "usr_" + hex.EncodeToString(randBytes)
+
+		baseUsername := socialUser.Name
+		if baseUsername == "" {
+			baseUsername = socialUser.Email
+		}
+		if baseUsername == "" {
+			baseUsername = userSubject
+		}
+
+		randomPassBytes := make([]byte, 16)
+		rand.Read(randomPassBytes)
+		randomPassword := hex.EncodeToString(randomPassBytes)
+
+		attemptRegister := func(uname string) (string, error) {
+			if h.UserRegistrar != nil {
+				if reg, ok := h.UserRegistrar.(interface {
+					Register(ctx context.Context, tenantID, username, email, password string) (*userstore.User, error)
+				}); ok {
+					regUser, regErr := reg.Register(r.Context(), tenantID, uname, socialUser.Email, randomPassword)
+					if regErr == nil && regUser != nil {
+						return regUser.Subject, nil
+					}
+					regSub, regErr2 := h.UserRegistrar.RegisterForSubject(r.Context(), tenantID, uname, socialUser.Email, randomPassword)
+					if regErr2 == nil && regSub != "" {
+						return regSub, nil
+					}
+					if regErr != nil {
+						return "", regErr
+					}
+					return "", regErr2
+				}
+				regSub, regErr := h.UserRegistrar.RegisterForSubject(r.Context(), tenantID, uname, socialUser.Email, randomPassword)
+				if regErr == nil && regSub != "" {
+					return regSub, nil
+				}
+				return "", regErr
+			}
+			if h.Store != nil {
+				err := h.Store.RegisterUser(tenantID, &User{
+					Username: uname,
+					Email:    socialUser.Email,
+					Password: randomPassword,
+					Subject:  userSubject,
+				})
+				if err != nil {
+					return "", err
+				}
+				return userSubject, nil
+			}
+			return "", fmt.Errorf("no user store or registrar configured")
+		}
+
+		sub, regErr := attemptRegister(baseUsername)
+		if regErr != nil {
+			errMsg := strings.ToLower(regErr.Error())
+			if strings.Contains(errMsg, "username") || strings.Contains(errMsg, "taken") || strings.Contains(errMsg, "duplicate") || strings.Contains(errMsg, "unique") {
+				suffixBytes := make([]byte, 4)
+				rand.Read(suffixBytes)
+				fallbackUsername := baseUsername + "_" + hex.EncodeToString(suffixBytes)
+				sub, regErr = attemptRegister(fallbackUsername)
+			}
+		}
+
+		if regErr != nil || sub == "" {
+			msg := "user provisioning failed"
+			if regErr != nil {
+				msg += ": " + regErr.Error()
+			}
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+		userSubject = sub
+	}
+
+	onError := func(msg string) {
+		http.Error(w, msg, http.StatusBadRequest)
+	}
+
+	h.finishAuthorization(
+		w, r,
+		tenantID,
+		userSubject,
+		stateClaims.ClientID,
+		stateClaims.RedirectURI,
+		stateClaims.ClientState,
+		stateClaims.Scope,
+		stateClaims.CodeChallenge,
+		stateClaims.CodeChallengeMethod,
+		onError,
+	)
 }

@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.dilithiauth</groupId>
-    <artifactId>dilithiauth-sdk</artifactId>
+    <groupId>com.github.Uttam-Mahata</groupId>
+    <artifactId>dilithiauth-java</artifactId>
     <version>1.0.1</version>
     <name>DilithiAuth Java SDK</name>
     <description>Official Java Client SDK for DilithiAuth Post-Quantum Identity Provider</description>

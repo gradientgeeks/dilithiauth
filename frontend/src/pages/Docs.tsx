@@ -197,7 +197,7 @@ print(f"User Email:   {user_info['email']}")`
     badge: 'Maven',
     installCmd: 'mvn dependency:add -Dartifact=com.dilithiauth:dilithiauth-sdk:1.0.0',
     manifestFile: 'pom.xml',
-    manifestContent: `<dependency>\n    <groupId>com.dilithiauth</groupId>\n    <artifactId>dilithiauth-sdk</artifactId>\n    <version>1.0.0</version>\n</dependency>`,
+    manifestContent: `<dependency>\n    <groupId>com.github.Uttam-Mahata</groupId>\n    <artifactId>dilithiauth-java</artifactId>\n    <version>1.0.1</version>\n</dependency>`,
     pkceCode: `import com.dilithiauth.client.PKCE;
 
 public class PkceDemo {

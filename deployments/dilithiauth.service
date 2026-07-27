@@ -1,0 +1,35 @@
+[Unit]
+Description=DilithiAuth Post-Quantum Identity Provider
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/dilithiauth
+ExecStart=/opt/dilithiauth/server
+Restart=always
+RestartSec=3
+
+Environment="DILITHIAUTH_ISSUER=https://dilithiauthapis.gradientgeeks.tech"
+Environment="DILITHIAUTH_ADDR=:8080"
+Environment="DILITHIAUTH_KEYS_DIR=/opt/dilithiauth/keys"
+Environment="DILITHIAUTH_POSTGRES_DSN=postgres://dilithiauth:***@127.0.0.1:5432/dilithiauth?sslmode=disable"
+Environment="DILITHIAUTH_SIGSTORE=redis"
+Environment="DILITHIAUTH_REDIS_ADDR=127.0.0.1:6380"
+Environment="DILITHIAUTH_REDIS_USER=dilithiauth"
+Environment="DILITHIAUTH_REDIS_PASS=***"
+Environment="DILITHIAUTH_FRONTEND_URL=https://dilithiauth.gradientgeeks.tech"
+Environment="DILITHIAUTH_GOOGLE_CLIENT_ID=your-google-client-id"
+Environment="DILITHIAUTH_GOOGLE_CLIENT_SECRET=your-google-client-secret"
+Environment="DILITHIAUTH_GOOGLE_REDIRECT_URI=https://dilithiauthapis.gradientgeeks.tech/auth/social/google/callback"
+Environment="DILITHIAUTH_GITHUB_CLIENT_ID=your-github-client-id"
+Environment="DILITHIAUTH_GITHUB_CLIENT_SECRET=your-github-client-secret"
+Environment="DILITHIAUTH_GITHUB_REDIRECT_URI=https://dilithiauthapis.gradientgeeks.tech/auth/social/github/callback"
+Environment="OCI_SMTP_HOST=smtp.email.ap-mumbai-1.oci.oraclecloud.com"
+Environment="OCI_SMTP_PORT=587"
+Environment="OCI_SMTP_USER=***"
+Environment="OCI_SMTP_PASS=***"
+Environment="OCI_SMTP_FROM=no-reply@gradientgeeks.tech"
+
+[Install]
+WantedBy=multi-user.target

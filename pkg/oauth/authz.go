@@ -113,7 +113,11 @@ func (s *MemoryAuthzStore) AddUser(tenantID string, u *User) {
 	if err != nil {
 		panic("oauth: hashing user password: " + err.Error())
 	}
-	stored := &User{Username: u.Username, Password: string(hash), Subject: u.Subject}
+	sub := u.Subject
+	if sub == "" {
+		sub = u.Username
+	}
+	stored := &User{Username: u.Username, Email: u.Email, Password: string(hash), Subject: sub}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -129,7 +133,11 @@ func (s *MemoryAuthzStore) RegisterUser(tenantID string, u *User) error {
 	if err != nil {
 		return err
 	}
-	stored := &User{Username: u.Username, Email: u.Email, Password: string(hash), Subject: u.Username}
+	sub := u.Subject
+	if sub == "" {
+		sub = u.Username
+	}
+	stored := &User{Username: u.Username, Email: u.Email, Password: string(hash), Subject: sub}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
