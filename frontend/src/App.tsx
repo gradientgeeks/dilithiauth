@@ -6,6 +6,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import NewApp from './pages/NewApp'
 import AppDetail from './pages/AppDetail'
+import Docs from './pages/Docs'
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { developer, loading } = useAuth()
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/" element={<RequireGuest><Landing /></RequireGuest>} />
           <Route path="/login" element={<RequireGuest><Login /></RequireGuest>} />
           <Route path="/register" element={<RequireGuest><Register /></RequireGuest>} />
+          <Route path="/docs" element={<Docs />} />
           <Route path="/apps" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/apps/new" element={<RequireAuth><NewApp /></RequireAuth>} />
           <Route path="/apps/:id" element={<RequireAuth><AppDetail /></RequireAuth>} />
