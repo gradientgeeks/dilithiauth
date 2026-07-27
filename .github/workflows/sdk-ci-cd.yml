@@ -166,3 +166,19 @@ jobs:
         run: |
           TAG_NAME="${GITHUB_REF_NAME}"
           go list -m "github.com/Uttam-Mahata/dilithiauth-go@${TAG_NAME}" || true
+
+  sync-sdk-repos:
+    name: Sync Standalone Public SDK Repositories
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Sync Go SDK (dilithiauth-go) & Java SDK (dilithiauth-java)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git subtree push --prefix sdk/go https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Uttam-Mahata/dilithiauth-go.git main || true
+          git subtree push --prefix sdk/java https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Uttam-Mahata/dilithiauth-java.git main || true
