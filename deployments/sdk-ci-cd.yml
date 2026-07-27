@@ -1,0 +1,103 @@
+name: DilithiAuth SDK CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk-ci-cd.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'sdk/**'
+  release:
+    types: [ published ]
+
+env:
+  DILITHIAUTH_DEFAULT_DOMAIN: "https://dilithiauthapis.gradientgeeks.tech"
+
+jobs:
+  build-js-sdk:
+    name: Build & Test JavaScript/TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install & Build JS SDK
+        run: |
+          cd sdk/js
+          npm install
+          npm run build
+
+  build-go-sdk:
+    name: Build & Test Go SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Test Go SDK
+        run: |
+          cd sdk/go
+          go test -v ./...
+
+  build-python-sdk:
+    name: Build & Test Python SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test & Package Python SDK
+        run: |
+          cd sdk/python
+          python -m unittest discover tests
+          pip install build
+          python -m build
+
+  build-java-sdk:
+    name: Build Java SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Compile Java SDK
+        run: |
+          cd sdk/java
+          mvn -B compile test-compile
+
+  build-dotnet-sdk:
+    name: Build .NET SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build & Pack .NET SDK
+        run: |
+          cd sdk/dotnet/DilithiAuth.Client
+          dotnet build --configuration Release
+          dotnet pack --configuration Release

@@ -1,7 +1,7 @@
 export type TokenStrategy = 'thin' | 'full' | 'cwt';
 export interface DilithiAuthClientOptions {
-    /** The base issuer domain of your DilithiAuth IdP instance (e.g. "https://dilithiauth.gradientgeeks.tech") */
-    domain: string;
+    /** The base issuer domain of your DilithiAuth IdP instance (defaults to "https://dilithiauthapis.gradientgeeks.tech") */
+    domain?: string;
     /** The registered OAuth 2.0 Client ID for your application */
     clientId: string;
     /** Client secret for confidential clients (leave undefined for Public/PKCE clients) */

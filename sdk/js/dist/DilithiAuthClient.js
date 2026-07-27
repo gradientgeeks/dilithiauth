@@ -6,12 +6,8 @@ const jwt_js_1 = require("./jwt.js");
 const STORAGE_KEY_PREFIX = 'dilithi_auth_';
 class DilithiAuthClient {
     constructor(options) {
-        if (!options.domain)
-            throw new Error('DilithiAuthClient: "domain" option is required');
-        if (!options.clientId)
-            throw new Error('DilithiAuthClient: "clientId" option is required');
-        // Normalize domain (remove trailing slash)
-        this.domain = options.domain.replace(/\/+$/, '');
+        const rawDomain = options.domain || 'https://dilithiauthapis.gradientgeeks.tech';
+        this.domain = rawDomain.replace(/\/+$/, '');
         this.clientId = options.clientId;
         this.clientSecret = options.clientSecret;
         this.redirectUri = options.redirectUri;

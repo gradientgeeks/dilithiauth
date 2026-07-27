@@ -454,7 +454,15 @@ var loginTmpl = template.Must(template.New("login").Parse(`<!DOCTYPE html>
     <input id="password" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
     <button class="btn" type="submit">Sign in</button>
   </form>
-  <div class="divider">or</div>
+  <div class="divider">or continue with</div>
+  <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+    <a href="/auth/social/google?client_id={{.ClientID}}&redirect_uri={{.RedirectURI}}&state={{.State}}" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem; background: #1f2937; border: 1px solid #374151; border-radius: 6px; color: #f9fafb; font-size: 0.85rem; font-weight: 500; text-decoration: none;">
+      Google
+    </a>
+    <a href="/auth/social/github?client_id={{.ClientID}}&redirect_uri={{.RedirectURI}}&state={{.State}}" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem; background: #1f2937; border: 1px solid #374151; border-radius: 6px; color: #f9fafb; font-size: 0.85rem; font-weight: 500; text-decoration: none;">
+      GitHub
+    </a>
+  </div>
   <div class="link-row">
     No account? <a href="/register?client_id={{.ClientID}}&redirect_uri={{.RedirectURI}}&state={{.State}}&scope={{.Scope}}&code_challenge={{.CodeChallenge}}&code_challenge_method={{.CodeChallengeMethod}}">Create one</a>
     · <a href="/forgot-password?client_id={{.ClientID}}&redirect_uri={{.RedirectURI}}&state={{.State}}&scope={{.Scope}}&code_challenge={{.CodeChallenge}}&code_challenge_method={{.CodeChallengeMethod}}">Forgot password?</a>

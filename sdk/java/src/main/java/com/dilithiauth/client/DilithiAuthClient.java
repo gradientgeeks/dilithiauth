@@ -13,19 +13,19 @@ import java.util.Map;
 
 public class DilithiAuthClient {
 
+    public static final String DEFAULT_DOMAIN = "https://dilithiauthapis.gradientgeeks.tech";
+
     private final String domain;
     private final String clientId;
     private final String clientSecret;
     private final String redirectUri;
 
     private DilithiAuthClient(Builder builder) {
-        if (builder.domain == null || builder.domain.isEmpty()) {
-            throw new IllegalArgumentException("domain is required");
-        }
         if (builder.clientId == null || builder.clientId.isEmpty()) {
             throw new IllegalArgumentException("clientId is required");
         }
-        this.domain = builder.domain.replaceAll("/+$", "");
+        String targetDomain = (builder.domain != null && !builder.domain.isEmpty()) ? builder.domain : DEFAULT_DOMAIN;
+        this.domain = targetDomain.replaceAll("/+$", "");
         this.clientId = builder.clientId;
         this.clientSecret = builder.clientSecret;
         this.redirectUri = builder.redirectUri;

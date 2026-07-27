@@ -10,6 +10,8 @@ class DilithiAuthException(Exception):
     """Base exception for DilithiAuth SDK errors."""
     pass
 
+DEFAULT_DOMAIN = "https://dilithiauthapis.gradientgeeks.tech"
+
 class DilithiAuthClient:
     """
     Official Python Client SDK for DilithiAuth Post-Quantum Identity Provider.
@@ -17,17 +19,16 @@ class DilithiAuthClient:
 
     def __init__(
         self,
-        domain: str,
         client_id: str,
+        domain: Optional[str] = DEFAULT_DOMAIN,
         client_secret: Optional[str] = None,
         redirect_uri: Optional[str] = None
     ):
-        if not domain:
-            raise ValueError("DilithiAuthClient: domain parameter is required")
         if not client_id:
             raise ValueError("DilithiAuthClient: client_id parameter is required")
 
-        self.domain = domain.rstrip('/')
+        target_domain = domain or DEFAULT_DOMAIN
+        self.domain = target_domain.rstrip('/')
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri

@@ -20,11 +20,8 @@ export class DilithiAuthClient {
   private storage: Storage;
 
   constructor(options: DilithiAuthClientOptions) {
-    if (!options.domain) throw new Error('DilithiAuthClient: "domain" option is required');
-    if (!options.clientId) throw new Error('DilithiAuthClient: "clientId" option is required');
-
-    // Normalize domain (remove trailing slash)
-    this.domain = options.domain.replace(/\/+$/, '');
+    const rawDomain = options.domain || 'https://dilithiauthapis.gradientgeeks.tech';
+    this.domain = rawDomain.replace(/\/+$/, '');
     this.clientId = options.clientId;
     this.clientSecret = options.clientSecret;
     this.redirectUri = options.redirectUri;

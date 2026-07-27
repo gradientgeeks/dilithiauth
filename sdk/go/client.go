@@ -54,13 +54,18 @@ type Claims struct {
 	PQCAlg    string `json:"pqc_alg,omitempty"`
 }
 
+// DefaultDomain is the official live DilithiAuth IdP issuer domain.
+const DefaultDomain = "https://dilithiauthapis.gradientgeeks.tech"
+
 // NewClient initializes a new DilithiAuth SDK Client.
 func NewClient(cfg Config) (*Client, error) {
-	if cfg.Domain == "" {
-		return nil, errors.New("dilithiauth: Domain is required")
-	}
 	if cfg.ClientID == "" {
 		return nil, errors.New("dilithiauth: ClientID is required")
+	}
+
+	domain := cfg.Domain
+	if domain == "" {
+		domain = DefaultDomain
 	}
 
 	httpClient := cfg.HTTPClient
@@ -68,7 +73,7 @@ func NewClient(cfg Config) (*Client, error) {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	domain := strings.TrimRight(cfg.Domain, "/")
+	domain = strings.TrimRight(domain, "/")
 	return &Client{
 		domain:       domain,
 		clientID:     cfg.ClientID,

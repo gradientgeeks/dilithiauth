@@ -11,6 +11,8 @@ namespace DilithiAuth.Client;
 
 public class DilithiAuthClient
 {
+    public const string DefaultDomain = "https://dilithiauthapis.gradientgeeks.tech";
+
     private readonly string _domain;
     private readonly string _clientId;
     private readonly string? _clientSecret;
@@ -20,10 +22,10 @@ public class DilithiAuthClient
     public DilithiAuthClient(DilithiAuthOptions options, HttpClient? httpClient = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        if (string.IsNullOrWhiteSpace(options.Domain)) throw new ArgumentException("Domain is required", nameof(options));
         if (string.IsNullOrWhiteSpace(options.ClientId)) throw new ArgumentException("ClientId is required", nameof(options));
 
-        _domain = options.Domain.TrimEnd('/');
+        string targetDomain = string.IsNullOrWhiteSpace(options.Domain) ? DefaultDomain : options.Domain;
+        _domain = targetDomain.TrimEnd('/');
         _clientId = options.ClientId;
         _clientSecret = options.ClientSecret;
         _redirectUri = options.RedirectUri;
