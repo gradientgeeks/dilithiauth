@@ -136,14 +136,12 @@ jobs:
       - name: NuGet Login (OIDC Trusted Publishing)
         uses: NuGet/login@v1
         id: login
-        continue-on-error: true
         with:
-          user: ${{ secrets.NUGET_USER || 'Uttam-Mahata' }}
+          user: 'gradientgeeks'
       - name: Push to NuGet
         run: |
           cd sdk/dotnet/DilithiAuth.Client
-          API_KEY="${{ steps.login.outputs.NUGET_API_KEY || secrets.NUGET_API_KEY }}"
-          dotnet nuget push bin/Release/*.nupkg -k "$API_KEY" -s https://api.nuget.org/v3/index.json
+          dotnet nuget push bin/Release/*.nupkg -k "${{ steps.login.outputs.NUGET_API_KEY }}" -s https://api.nuget.org/v3/index.json
 
   publish-go:
     name: Index Go Module on Go Proxy
