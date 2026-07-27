@@ -95,6 +95,16 @@ POST /token/thin?sub=user_123         # Issue Thin Token (sidecar reference)
 POST /token/full?sub=user_123         # Issue Jumbo Token (embedded signature)`}
           </div>
         </div>
+
+        {/* Footer */}
+        <div style={{ marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          <div>© 2026 DilithiAuth · Quantum-Safe Identity Provider</div>
+          <div style={{ display: 'flex', gap: '1.25rem' }}>
+            <Link to="/privacy" style={{ color: 'var(--text-muted)' }}>Privacy Policy</Link>
+            <Link to="/terms" style={{ color: 'var(--text-muted)' }}>Terms of Service</Link>
+            <Link to="/docs" style={{ color: 'var(--text-muted)' }}>Documentation</Link>
+          </div>
+        </div>
       </div>
     </>
   )
