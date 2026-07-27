@@ -97,6 +97,8 @@ jobs:
         run: |
           cd sdk/js
           npm install
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version || true
           npm run build
           npm publish --access public
         env:
@@ -115,6 +117,8 @@ jobs:
       - name: Publish to PyPI
         run: |
           cd sdk/python
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
           pip install build twine
           python -m build
           twine upload --skip-existing dist/* -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
@@ -135,7 +139,8 @@ jobs:
       - name: Build and Pack .NET SDK
         run: |
           cd sdk/dotnet/DilithiAuth.Client
-          dotnet pack -c Release
+          VERSION="${GITHUB_REF_NAME#v}"
+          dotnet pack -c Release -p:Version="$VERSION"
       - name: NuGet Login (OIDC Trusted Publishing)
         uses: NuGet/login@v1
         id: login
@@ -157,5 +162,5 @@ jobs:
           go-version: '1.24'
       - name: Index on proxy.golang.org
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          TAG_NAME="${GITHUB_REF_NAME}"
           go list -m "github.com/Uttam-Mahata/DilithiAuth/sdk/go@${TAG_NAME}" || true
