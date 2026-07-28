@@ -10,141 +10,169 @@ export default function Navbar() {
   const { developer, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [open, setOpen] = useState(false)
 
-  // Close menu on route change
+  useEffect(() => { setOpen(false) }, [location.pathname])
   useEffect(() => {
-    setMobileOpen(false)
-  }, [location.pathname])
-
-  // Close menu on ESC key
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMobileOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
   }, [])
 
   const handleLogout = async () => {
     try { await logout() } catch { /* ignore */ }
-    setMobileOpen(false)
+    setOpen(false)
     navigate('/login')
   }
 
-  const isActive = (path: string) =>
-    location.pathname === path ? 'active' : ''
+  const isActive = (path: string) => location.pathname === path
 
-  const guestLinks = (
-    <>
-      <Link to="/" className={`nav-link ${isActive('/')}`}>
-        <ShieldCheck size={16} />
-        <span>Overview</span>
-      </Link>
-      <Link to="/docs" className={`nav-link ${isActive('/docs')}`}>
-        <BookOpen size={16} />
-        <span>SDK & Docs</span>
-      </Link>
-      <Link to="/login" className={`nav-link ${isActive('/login')}`}>
-        <LogIn size={16} />
-        <span>Sign in</span>
-      </Link>
-      <Link to="/register" className="nav-link nav-cta">
-        <UserPlus size={16} />
-        <span>Get Started</span>
-      </Link>
-    </>
+  const NavLink = ({ to, icon: Icon, children }: { to: string; icon: React.ElementType; children: React.ReactNode }) => (
+    <Link
+      to={to}
+      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150
+        ${isActive(to)
+          ? 'bg-[var(--color-hover)] text-[var(--color-txt)] font-semibold'
+          : 'text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)]'
+        }`}
+    >
+      <Icon size={16} />
+      {children}
+    </Link>
   )
 
-  const authLinks = (
-    <>
-      <span className="nav-email-pill">
-        <Mail size={13} />
-        <span>{developer?.email}</span>
-      </span>
-      <Link to="/apps" className={`nav-link ${isActive('/apps')}`}>
-        <LayoutGrid size={16} />
-        <span>Applications</span>
-      </Link>
-      <Link to="/docs" className={`nav-link ${isActive('/docs')}`}>
-        <BookOpen size={16} />
-        <span>SDK & Docs</span>
-      </Link>
-      <button className="nav-link nav-signout" onClick={handleLogout}>
-        <LogOut size={16} />
-        <span>Sign out</span>
-      </button>
-    </>
+  const DrawerLink = ({ to, icon: Icon, children, className = '' }: { to: string; icon: React.ElementType; children: React.ReactNode; className?: string }) => (
+    <Link
+      to={to}
+      className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150
+        ${isActive(to)
+          ? 'bg-[var(--color-hover)] text-[var(--color-txt)] font-semibold'
+          : 'text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)]'
+        } ${className}`}
+    >
+      <Icon size={18} />
+      {children}
+    </Link>
   )
 
   return (
     <>
-      <nav className="navbar">
-        <Link to={developer ? '/apps' : '/'} className="nav-brand">
-          <img src="/favicon.svg" alt="DilithiAuth" width={28} height={28} />
-          <span className="nav-brand-name">
+      {/* Main nav bar */}
+      <nav
+        className="sticky top-0 z-[200] w-full h-[60px] flex items-center justify-between px-4 md:px-6
+          bg-[#090d16]/90 backdrop-blur-md border-b border-[var(--color-border)]"
+      >
+        {/* Brand */}
+        <Link
+          to={developer ? '/apps' : '/'}
+          className="flex items-center gap-2 no-underline hover:no-underline"
+        >
+          <img src="/favicon.svg" alt="DilithiAuth" width={28} height={28} className="block shrink-0" />
+          <span className="flex items-center gap-2 font-bold text-[var(--color-txt)] text-[0.97rem] tracking-tight">
             DilithiAuth
-            <span className="nav-brand-badge">PQC IdP</span>
+            <span className="bg-[var(--color-hover)] border border-[var(--color-border-mid)] text-[var(--color-sub)]
+              text-[0.62rem] font-bold px-1.5 py-0.5 rounded uppercase tracking-widest">
+              PQC IdP
+            </span>
           </span>
         </Link>
 
-        {/* Desktop links */}
-        <div className="nav-desktop-links">
-          {developer ? authLinks : guestLinks}
+        {/* Desktop links — hidden on tablet/mobile */}
+        <div className="hidden lg:flex items-center gap-1">
+          {developer ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 text-[var(--color-sub)] text-[0.8rem]
+                px-2.5 py-1.5 border border-[var(--color-border)] rounded-md max-w-[200px] truncate">
+                <Mail size={13} /><span className="truncate">{developer.email}</span>
+              </span>
+              <NavLink to="/apps" icon={LayoutGrid}>Applications</NavLink>
+              <NavLink to="/docs" icon={BookOpen}>SDK & Docs</NavLink>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium
+                  text-rose-300 hover:bg-rose-500/10 hover:text-rose-400 transition-all duration-150 cursor-pointer border-none bg-transparent"
+              >
+                <LogOut size={16} /> Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/" icon={ShieldCheck}>Overview</NavLink>
+              <NavLink to="/docs" icon={BookOpen}>SDK & Docs</NavLink>
+              <NavLink to="/login" icon={LogIn}>Sign in</NavLink>
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold
+                  bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-h)] hover:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]
+                  transition-all duration-150 ml-1 no-underline hover:no-underline"
+              >
+                <UserPlus size={16} /> Get Started
+              </Link>
+            </>
+          )}
         </div>
 
-        {/* Hamburger — shown on tablet/mobile */}
+        {/* Hamburger — shown on tablet & mobile */}
         <button
-          className="nav-hamburger"
-          onClick={() => setMobileOpen(v => !v)}
-          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={mobileOpen}
+          onClick={() => setOpen(v => !v)}
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md border border-[var(--color-border)]
+            text-[var(--color-txt)] bg-transparent hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
         >
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          {open ? <X size={22} /> : <Menu size={22} />}
         </button>
       </nav>
 
-      {/* Slide-down mobile drawer */}
-      {mobileOpen && (
+      {/* Mobile drawer */}
+      {open && (
         <>
+          {/* Backdrop */}
           <div
-            className="nav-backdrop"
-            onClick={() => setMobileOpen(false)}
+            className="fixed inset-0 z-[198] bg-black/55 backdrop-blur-sm"
+            style={{ animation: 'fadeIn .18s ease-out' }}
+            onClick={() => setOpen(false)}
             aria-hidden="true"
           />
-          <div className="nav-mobile-drawer" role="dialog" aria-label="Navigation menu">
-            <div className="nav-drawer-inner">
+          {/* Slide-down drawer */}
+          <div
+            className="fixed top-[60px] left-0 right-0 z-[199] bg-[var(--color-card)]
+              border-b border-[var(--color-border)] shadow-2xl lg:hidden"
+            style={{ animation: 'slideDown .22s cubic-bezier(0.16,1,0.3,1)' }}
+            role="dialog"
+            aria-label="Navigation"
+          >
+            <div className="max-w-xl mx-auto px-4 py-3 pb-4">
               {developer && (
-                <div className="nav-drawer-user">
-                  <Mail size={14} />
-                  <span>{developer.email}</span>
+                <div className="flex items-center gap-2 text-[var(--color-sub)] text-[0.82rem]
+                  px-3 py-2.5 border-b border-[var(--color-border)] mb-2 truncate">
+                  <Mail size={14} /><span className="truncate">{developer.email}</span>
                 </div>
               )}
-              <div className="nav-drawer-links">
+              <div className="flex flex-col gap-1">
                 {developer ? (
                   <>
-                    <Link to="/apps" className={`drawer-link ${isActive('/apps')}`}>
-                      <LayoutGrid size={18} /> Applications
-                    </Link>
-                    <Link to="/docs" className={`drawer-link ${isActive('/docs')}`}>
-                      <BookOpen size={18} /> SDK & Docs
-                    </Link>
-                    <button className="drawer-link drawer-signout" onClick={handleLogout}>
+                    <DrawerLink to="/apps" icon={LayoutGrid}>Applications</DrawerLink>
+                    <DrawerLink to="/docs" icon={BookOpen}>SDK & Docs</DrawerLink>
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm font-medium
+                        text-rose-300 hover:bg-rose-500/10 hover:text-rose-400 transition-all duration-150 cursor-pointer border-none bg-transparent mt-1"
+                    >
                       <LogOut size={18} /> Sign out
                     </button>
                   </>
                 ) : (
                   <>
-                    <Link to="/" className={`drawer-link ${isActive('/')}`}>
-                      <ShieldCheck size={18} /> Overview
-                    </Link>
-                    <Link to="/docs" className={`drawer-link ${isActive('/docs')}`}>
-                      <BookOpen size={18} /> SDK & Docs
-                    </Link>
-                    <Link to="/login" className={`drawer-link ${isActive('/login')}`}>
-                      <LogIn size={18} /> Sign in
-                    </Link>
-                    <Link to="/register" className="drawer-link drawer-cta">
+                    <DrawerLink to="/" icon={ShieldCheck}>Overview</DrawerLink>
+                    <DrawerLink to="/docs" icon={BookOpen}>SDK & Docs</DrawerLink>
+                    <DrawerLink to="/login" icon={LogIn}>Sign in</DrawerLink>
+                    <Link
+                      to="/register"
+                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 mt-1.5 rounded-md
+                        text-sm font-semibold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-h)]
+                        transition-all duration-150 no-underline hover:no-underline"
+                    >
                       <UserPlus size={18} /> Get Started
                     </Link>
                   </>
