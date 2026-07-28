@@ -573,29 +573,31 @@ export default function Docs() {
   const endpointRes = getEndpointResponse()
 
   return (
-    <div>
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-txt)]">
       <Navbar />
 
-      {/* Mobile Sub-Header & Sticky Navigation Trigger (<768px) */}
-      <div className="mobile-sub-header">
+      {/* Mobile Sub-Header & Sticky Navigation Trigger (< md) */}
+      <div className="md:hidden sticky top-[60px] z-30 flex items-center justify-between px-4 py-2.5 bg-[#090d16]/95 backdrop-blur-md border-b border-[var(--color-border)]">
         <button
           ref={triggerBtnRef}
-          className="mobile-nav-toggle btn btn-outline btn-sm flex items-center gap-2"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold border border-[var(--color-border)] text-[var(--color-txt)] bg-[var(--color-card)] hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
           onClick={() => setMobileNavOpen(!mobileNavOpen)}
           aria-expanded={mobileNavOpen}
           aria-controls="docs-sidebar-drawer"
           aria-label="Toggle documentation navigation menu"
         >
           <Menu size={16} />
-          <span>Documentation Menu</span>
+          <span>Docs Menu</span>
         </button>
-        <span className="text-muted text-xs">Section: {selectedEndpoint}</span>
+        <span className="text-[var(--color-sub)] text-xs font-mono">
+          Endpoint: <span className="text-sky-400">/{selectedEndpoint}</span>
+        </span>
       </div>
 
       {/* Backdrop Overlay */}
       {mobileNavOpen && (
         <div
-          className="drawer-backdrop"
+          className="fixed inset-0 z-[190] bg-black/65 backdrop-blur-sm"
           onClick={() => setMobileNavOpen(false)}
           aria-hidden="true"
         />
@@ -605,17 +607,19 @@ export default function Docs() {
       <aside
         id="docs-sidebar-drawer"
         ref={drawerRef}
-        className={`docs-drawer ${mobileNavOpen ? 'open' : ''}`}
+        className={`fixed top-[60px] left-0 bottom-0 z-[191] w-[280px] bg-[var(--color-card)] border-r border-[var(--color-border)] transform transition-transform duration-200 ease-out flex flex-col ${
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label="Documentation Navigation Drawer"
       >
-        <div className="drawer-header">
-          <div className="flex items-center gap-2 font-semibold" style={{ color: 'var(--text-main)' }}>
-            <BookOpen size={18} /> Documentation
+        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+          <div className="flex items-center gap-2 font-semibold text-sm text-[var(--color-txt)]">
+            <BookOpen size={18} className="text-blue-400" /> Documentation Menu
           </div>
           <button
-            className="btn btn-outline btn-sm p-1"
+            className="p-1 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors"
             onClick={() => setMobileNavOpen(false)}
             aria-label="Close navigation drawer"
           >
@@ -623,217 +627,150 @@ export default function Docs() {
           </button>
         </div>
 
-        <div className="drawer-body">
-          <nav className="drawer-nav">
-            <div className="drawer-section-title">Quick Jump</div>
-            <a
-              href="#quickstart"
-              onClick={() => setMobileNavOpen(false)}
-              className="drawer-nav-item"
-            >
-              <Terminal size={15} /> 1. SDK Quickstart
-            </a>
-            <a
-              href="#code-snippets"
-              onClick={() => setMobileNavOpen(false)}
-              className="drawer-nav-item"
-            >
-              <Code size={15} /> 2. Code Snippets
-            </a>
-            <a
-              href="#api-reference"
-              onClick={() => setMobileNavOpen(false)}
-              className="drawer-nav-item"
-            >
-              <Key size={15} /> 3. API Reference
-            </a>
-            <a
-              href="#token-strategies"
-              onClick={() => setMobileNavOpen(false)}
-              className="drawer-nav-item"
-            >
-              <Cpu size={15} /> 4. PQC Token Strategies
-            </a>
-
-            <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>API Endpoints</div>
-            <a
-              href="#api-reference"
-              onClick={() => { setSelectedEndpoint('discovery'); setMobileNavOpen(false); }}
-              className={`drawer-nav-item ${selectedEndpoint === 'discovery' ? 'active' : ''}`}
-            >
-              /.well-known/openid
-            </a>
-            <a
-              href="#api-reference"
-              onClick={() => { setSelectedEndpoint('jwks'); setMobileNavOpen(false); }}
-              className={`drawer-nav-item ${selectedEndpoint === 'jwks' ? 'active' : ''}`}
-            >
-              /.well-known/jwks.json
-            </a>
-            <a
-              href="#api-reference"
-              onClick={() => { setSelectedEndpoint('authorize'); setMobileNavOpen(false); }}
-              className={`drawer-nav-item ${selectedEndpoint === 'authorize' ? 'active' : ''}`}
-            >
-              /authorize (PKCE)
-            </a>
-            <a
-              href="#api-reference"
-              onClick={() => { setSelectedEndpoint('token'); setMobileNavOpen(false); }}
-              className={`drawer-nav-item ${selectedEndpoint === 'token' ? 'active' : ''}`}
-            >
-              /token
-            </a>
-            <a
-              href="#api-reference"
-              onClick={() => { setSelectedEndpoint('userinfo'); setMobileNavOpen(false); }}
-              className={`drawer-nav-item ${selectedEndpoint === 'userinfo' ? 'active' : ''}`}
-            >
-              /userinfo
-            </a>
-            <a
-              href="#api-reference"
-              onClick={() => { setSelectedEndpoint('revoke'); setMobileNavOpen(false); }}
-              className={`drawer-nav-item ${selectedEndpoint === 'revoke' ? 'active' : ''}`}
-            >
-              /revoke
-            </a>
-          </nav>
-        </div>
-      </aside>
-
-      {/* Enterprise Documentation 3-Column Layout (R1) */}
-      <div className="docs-layout">
-        {/* Left Sticky Sidebar Navigation (Desktop/Tablet) */}
-        <aside className="docs-sidebar">
-          <div className="sidebar-nav-group">
-            <div className="sidebar-nav-title">Documentation</div>
-            <a href="#quickstart" className="sidebar-nav-link">
-              <Terminal size={15} /> SDK Quickstart
-            </a>
-            <a href="#code-snippets" className="sidebar-nav-link">
-              <Code size={15} /> Code Snippets
-            </a>
-            <a href="#api-reference" className="sidebar-nav-link">
-              <Key size={15} /> API Reference
-            </a>
-            <a href="#token-strategies" className="sidebar-nav-link">
-              <Cpu size={15} /> PQC Token Strategies
-            </a>
-          </div>
-
-          <div className="sidebar-nav-group">
-            <div className="sidebar-nav-title">API Endpoints</div>
-            <button
-              onClick={() => setSelectedEndpoint('discovery')}
-              className={`sidebar-sub-link ${selectedEndpoint === 'discovery' ? 'active' : ''}`}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              /.well-known/openid
-            </button>
-            <button
-              onClick={() => setSelectedEndpoint('jwks')}
-              className={`sidebar-sub-link ${selectedEndpoint === 'jwks' ? 'active' : ''}`}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              /.well-known/jwks.json
-            </button>
-            <button
-              onClick={() => setSelectedEndpoint('authorize')}
-              className={`sidebar-sub-link ${selectedEndpoint === 'authorize' ? 'active' : ''}`}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              /authorize (PKCE)
-            </button>
-            <button
-              onClick={() => setSelectedEndpoint('token')}
-              className={`sidebar-sub-link ${selectedEndpoint === 'token' ? 'active' : ''}`}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              /token
-            </button>
-            <button
-              onClick={() => setSelectedEndpoint('userinfo')}
-              className={`sidebar-sub-link ${selectedEndpoint === 'userinfo' ? 'active' : ''}`}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              /userinfo
-            </button>
-            <button
-              onClick={() => setSelectedEndpoint('revoke')}
-              className={`sidebar-sub-link ${selectedEndpoint === 'revoke' ? 'active' : ''}`}
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              /revoke
-            </button>
-          </div>
-        </aside>
-
-        {/* Main Content Column */}
-        <main className="docs-main">
-          {/* Page Header */}
-          <div className="page-header" style={{ marginBottom: '2rem' }}>
-            <div>
-              <span className="badge badge-hybrid" style={{ marginBottom: '0.6rem' }}>
-                <Shield size={12} /> NIST FIPS 204 Standard • ML-DSA-44 & Ed25519
-              </span>
-              <h1>DilithiAuth SDK & Interactive Documentation</h1>
-              <p style={{ maxWidth: '680px' }}>
-                DilithiAuth is a research-oriented Identity Provider (IdP) designed to mitigate the "Harvest Now, Forge Later" (HNFL) threat. It implements the Authorization Code Flow using hybrid signatures combining classical Ed25519 with NIST-standardized ML-DSA-44 (FIPS 204) to prevent future quantum-enabled token forgery and identity impersonation.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <a
-                href="https://csrc.nist.gov/pubs/fips/204/final"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-outline btn-sm"
-              >
-                <ExternalLink size={14} /> FIPS 204 Spec
+        <div className="flex-1 overflow-y-auto p-4 space-y-5 text-sm">
+          <div>
+            <div className="text-[0.7rem] font-bold uppercase tracking-wider text-[var(--color-sub)] mb-2">Quick Jump</div>
+            <div className="space-y-1">
+              <a href="#quickstart" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Terminal size={15} /> 1. SDK Quickstart
+              </a>
+              <a href="#code-snippets" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Code size={15} /> 2. Code Snippets
+              </a>
+              <a href="#api-reference" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Key size={15} /> 3. API Reference
+              </a>
+              <a href="#token-strategies" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Cpu size={15} /> 4. PQC Token Strategies
               </a>
             </div>
           </div>
 
-          {/* Navigation Quick Jump Tabs (Desktop/Tablet Top Navigation Bar) */}
-          <div className="tab-header docs-top-tab-header" style={{ marginBottom: '2rem' }}>
-            <a href="#quickstart" className="tab-btn active">
-              <Terminal size={15} /> SDK Quickstart
+          <div>
+            <div className="text-[0.7rem] font-bold uppercase tracking-wider text-[var(--color-sub)] mb-2">API Endpoints</div>
+            <div className="space-y-1 font-mono text-xs">
+              {(['discovery', 'jwks', 'authorize', 'token', 'userinfo', 'revoke'] as EndpointKey[]).map((ep) => (
+                <button
+                  key={ep}
+                  onClick={() => { setSelectedEndpoint(ep); setMobileNavOpen(false); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+                    selectedEndpoint === ep
+                      ? 'bg-[var(--color-hover)] text-blue-400 font-semibold border-l-2 border-blue-500'
+                      : 'text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)]'
+                  }`}
+                >
+                  /{ep === 'discovery' ? '.well-known/openid' : ep === 'jwks' ? '.well-known/jwks.json' : ep}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Enterprise Documentation 3-Column Layout */}
+      <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 py-8 flex gap-8 items-start">
+        
+        {/* Left Sticky Sidebar Navigation (Desktop/Tablet) */}
+        <aside className="hidden md:block w-56 shrink-0 sticky top-[76px] max-h-[calc(100vh-90px)] overflow-y-auto pr-2 space-y-6 text-sm">
+          <div>
+            <div className="text-[0.7rem] font-bold uppercase tracking-wider text-[var(--color-sub)] mb-2.5">Documentation</div>
+            <div className="space-y-1">
+              <a href="#quickstart" className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Terminal size={15} /> SDK Quickstart
+              </a>
+              <a href="#code-snippets" className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Code size={15} /> Code Snippets
+              </a>
+              <a href="#api-reference" className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Key size={15} /> API Reference
+              </a>
+              <a href="#token-strategies" className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+                <Cpu size={15} /> PQC Strategies
+              </a>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[0.7rem] font-bold uppercase tracking-wider text-[var(--color-sub)] mb-2.5">API Endpoints</div>
+            <div className="space-y-1 font-mono text-xs">
+              {(['discovery', 'jwks', 'authorize', 'token', 'userinfo', 'revoke'] as EndpointKey[]).map((ep) => (
+                <button
+                  key={ep}
+                  onClick={() => setSelectedEndpoint(ep)}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-md transition-colors ${
+                    selectedEndpoint === ep
+                      ? 'bg-[var(--color-hover)] text-blue-400 font-semibold border-l-2 border-blue-500'
+                      : 'text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)]'
+                  }`}
+                >
+                  /{ep === 'discovery' ? '.well-known/openid' : ep === 'jwks' ? '.well-known/jwks.json' : ep}
+                </button>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Column */}
+        <main className="flex-1 min-w-0 space-y-8">
+          
+          {/* Page Header */}
+          <div className="space-y-3 pb-4 border-b border-[var(--color-border)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-300 text-xs font-semibold">
+                <Shield size={13} /> NIST FIPS 204 Standard • ML-DSA-44 &amp; Ed25519
+              </span>
+              <a
+                href="https://csrc.nist.gov/pubs/fips/204/final"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-[var(--color-border)] text-[var(--color-sub)] hover:text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors"
+              >
+                <ExternalLink size={14} /> FIPS 204 Spec
+              </a>
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-txt)]">
+              DilithiAuth SDK &amp; Interactive Documentation
+            </h1>
+
+            <p className="text-[var(--color-sub)] text-sm sm:text-base leading-relaxed max-w-3xl">
+              DilithiAuth is a research-oriented Identity Provider (IdP) designed to mitigate the "Harvest Now, Forge Later" (HNFL) threat. It implements the Authorization Code Flow using hybrid signatures combining classical Ed25519 with NIST-standardized ML-DSA-44 (FIPS 204) to prevent future quantum-enabled token forgery and identity impersonation.
+            </p>
+          </div>
+
+          {/* Quick Jump Bar */}
+          <div className="flex flex-wrap gap-2 text-xs">
+            <a href="#quickstart" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+              <Terminal size={14} className="text-sky-400" /> 1. SDK Quickstart
             </a>
-            <a href="#code-snippets" className="tab-btn">
-              <Code size={15} /> Code Snippets
+            <a href="#code-snippets" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+              <Code size={14} className="text-emerald-400" /> 2. Code Snippets
             </a>
-            <a href="#api-reference" className="tab-btn">
-              <Key size={15} /> API Reference
+            <a href="#api-reference" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+              <Key size={14} className="text-amber-400" /> 3. API Reference
             </a>
-            <a href="#token-strategies" className="tab-btn">
-              <Cpu size={15} /> PQC Token Strategies
+            <a href="#token-strategies" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-txt)] hover:bg-[var(--color-hover)] transition-colors">
+              <Cpu size={14} className="text-violet-400" /> 4. PQC Token Strategies
             </a>
           </div>
 
           {/* SECTION 1: SDK Quickstart & Language Switcher */}
-          <section id="quickstart" style={{ marginBottom: '2.5rem' }}>
-            <div className="card">
-              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
+          <section id="quickstart" className="scroll-mt-24 space-y-4">
+            <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-5 sm:p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2>1. SDK Installation & Quickstart</h2>
-                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                  <h2 className="text-lg font-semibold text-[var(--color-txt)]">1. SDK Installation &amp; Quickstart</h2>
+                  <p className="text-[var(--color-sub)] text-xs sm:text-sm mt-0.5">
                     Select your primary language stack to get copy-ready package installation commands and manifests.
                   </p>
                 </div>
-                <span className="badge badge-public">5 Languages Supported</span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                  5 Languages Supported
+                </span>
               </div>
 
               {/* Language Switcher Tab Bar */}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  marginBottom: '1.5rem',
-                  overflowX: 'auto',
-                  paddingBottom: '0.4rem',
-                  borderBottom: '1px solid var(--border-color)'
-                }}
-              >
+              <div className="flex gap-2 overflow-x-auto pb-2 border-b border-[var(--color-border)]">
                 {(Object.keys(LANGUAGE_DATA) as Language[]).map((langKey) => {
                   const lang = LANGUAGE_DATA[langKey]
                   const isSelected = selectedLang === langKey
@@ -841,18 +778,13 @@ export default function Docs() {
                     <button
                       key={langKey}
                       onClick={() => setSelectedLang(langKey)}
-                      className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
-                      style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem' }}
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
+                        isSelected
+                          ? 'bg-[var(--color-primary)] text-white'
+                          : 'bg-transparent text-[var(--color-sub)] border border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)]'
+                      }`}
                     >
-                      <span
-                        className="badge"
-                        style={{
-                          fontSize: '0.68rem',
-                          padding: '1px 5px',
-                          background: isSelected ? 'rgba(255,255,255,0.2)' : '#1f2937',
-                          color: isSelected ? 'white' : '#9ca3af'
-                        }}
-                      >
+                      <span className={`px-1.5 py-0.5 rounded text-[0.65rem] uppercase ${isSelected ? 'bg-white/20 text-white' : 'bg-[#1f2937] text-gray-400'}`}>
                         {lang.badge}
                       </span>
                       {lang.name}
@@ -861,25 +793,24 @@ export default function Docs() {
                 })}
               </div>
 
-              {/* Installation & Manifest Command Boxes (R2 Protected Wrapper) */}
-              <div className="detail-grid" style={{ marginBottom: '1.25rem' }}>
-                <div>
-                  <div className="detail-label">CLI Package Installation</div>
-                  <div className="cmd-box">
-                    <code>{langInfo.installCmd}</code>
+              {/* Installation & Manifest Command Boxes */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-sub)]">CLI Package Installation</div>
+                  <div className="flex items-center justify-between gap-3 p-3 bg-[#050810] border border-[var(--color-border)] rounded-lg font-mono text-xs text-sky-300 overflow-x-auto">
+                    <code className="whitespace-nowrap">{langInfo.installCmd}</code>
                     <button
-                      className="btn btn-outline btn-sm"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-[var(--color-border)] text-[var(--color-sub)] bg-transparent hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)] transition-colors shrink-0 cursor-pointer"
                       onClick={() => copyToClipboard(`install-${langInfo.id}`, langInfo.installCmd)}
-                      style={{ flexShrink: 0 }}
                     >
                       {copiedMap[`install-${langInfo.id}`] ? (
                         <>
-                          <Check size={14} color="#10b981" />
-                          <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
+                          <Check size={13} className="text-emerald-400" />
+                          <span className="text-emerald-400 font-semibold">Copied!</span>
                         </>
                       ) : (
                         <>
-                          <Copy size={14} />
+                          <Copy size={13} />
                           <span>Copy</span>
                         </>
                       )}
@@ -887,25 +818,22 @@ export default function Docs() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="detail-label">Manifest File ({langInfo.manifestFile})</div>
-                  <div className="cmd-box">
-                    <code style={{ color: '#9ca3af', whiteSpace: 'pre' }}>
-                      {langInfo.manifestContent}
-                    </code>
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-sub)]">Manifest File ({langInfo.manifestFile})</div>
+                  <div className="flex items-start justify-between gap-3 p-3 bg-[#050810] border border-[var(--color-border)] rounded-lg font-mono text-xs text-gray-400 overflow-x-auto">
+                    <code className="whitespace-pre">{langInfo.manifestContent}</code>
                     <button
-                      className="btn btn-outline btn-sm"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-[var(--color-border)] text-[var(--color-sub)] bg-transparent hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)] transition-colors shrink-0 cursor-pointer"
                       onClick={() => copyToClipboard(`manifest-${langInfo.id}`, langInfo.manifestContent)}
-                      style={{ flexShrink: 0 }}
                     >
                       {copiedMap[`manifest-${langInfo.id}`] ? (
                         <>
-                          <Check size={14} color="#10b981" />
-                          <span style={{ color: '#10b981', fontWeight: 600 }}>Copied!</span>
+                          <Check size={13} className="text-emerald-400" />
+                          <span className="text-emerald-400 font-semibold">Copied!</span>
                         </>
                       ) : (
                         <>
-                          <Copy size={14} />
+                          <Copy size={13} />
                           <span>Copy</span>
                         </>
                       )}
@@ -917,52 +845,46 @@ export default function Docs() {
           </section>
 
           {/* SECTION 2: Authentic PKCE & Auth Code Snippets */}
-          <section id="code-snippets" style={{ marginBottom: '2.5rem' }}>
-            <div className="card">
-              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1rem' }}>
+          <section id="code-snippets" className="scroll-mt-24 space-y-4">
+            <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-5 sm:p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2>2. Code Challenge & Integration Snippets</h2>
-                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                  <h2 className="text-lg font-semibold text-[var(--color-txt)]">2. Code Challenge &amp; Integration Snippets</h2>
+                  <p className="text-[var(--color-sub)] text-xs sm:text-sm mt-0.5">
                     Authentic PKCE S256 code challenge generation, OAuth2 authorization, token exchange, and userinfo claims for {langInfo.name}.
                   </p>
                 </div>
-                <span className="badge badge-hybrid">
-                  <Shield size={11} /> PKCE S256 Mandated
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-violet-500/15 border border-violet-500/30 text-violet-300">
+                  <Shield size={12} /> PKCE S256 Mandated
                 </span>
               </div>
 
               {/* Snippet Stage Sub-tabs */}
-              <div className="tab-header" style={{ marginBottom: '1rem' }}>
-                <button
-                  className={`tab-btn ${activeCodeStage === 'pkce' ? 'active' : ''}`}
-                  onClick={() => setActiveCodeStage('pkce')}
-                >
-                  <Key size={14} /> 1. PKCE S256 Challenge
-                </button>
-                <button
-                  className={`tab-btn ${activeCodeStage === 'init' ? 'active' : ''}`}
-                  onClick={() => setActiveCodeStage('init')}
-                >
-                  <Code size={14} /> 2. Client Init & Auth URL
-                </button>
-                <button
-                  className={`tab-btn ${activeCodeStage === 'exchange' ? 'active' : ''}`}
-                  onClick={() => setActiveCodeStage('exchange')}
-                >
-                  <Cpu size={14} /> 3. Code Exchange & PQC Token
-                </button>
-                <button
-                  className={`tab-btn ${activeCodeStage === 'userinfo' ? 'active' : ''}`}
-                  onClick={() => setActiveCodeStage('userinfo')}
-                >
-                  <BookOpen size={14} /> 4. UserInfo Retrieval
-                </button>
+              <div className="flex gap-2 overflow-x-auto pb-1 border-b border-[var(--color-border)]">
+                {[
+                  { id: 'pkce', label: '1. PKCE S256 Challenge', icon: Key },
+                  { id: 'init', label: '2. Client Init & Auth URL', icon: Code },
+                  { id: 'exchange', label: '3. Code Exchange & PQC Token', icon: Cpu },
+                  { id: 'userinfo', label: '4. UserInfo Retrieval', icon: BookOpen }
+                ].map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
+                      activeCodeStage === id
+                        ? 'bg-[var(--color-primary)] text-white'
+                        : 'bg-transparent text-[var(--color-sub)] border border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)]'
+                    }`}
+                    onClick={() => setActiveCodeStage(id as any)}
+                  >
+                    <Icon size={14} /> {label}
+                  </button>
+                ))}
               </div>
 
-              {/* Active Code Block Card (R2 Code Header Strip Protection) */}
-              <div className="code-card">
-                <div className="code-header">
-                  <span className="mono" style={{ fontSize: '0.75rem' }}>
+              {/* Active Code Block Card */}
+              <div className="border border-[var(--color-border)] rounded-lg overflow-hidden bg-[#050810]">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-[#0b0f19] border-b border-[var(--color-border)] text-xs font-mono text-gray-400">
+                  <span>
                     {selectedLang.toUpperCase()} — Stage:{' '}
                     {activeCodeStage === 'pkce'
                       ? 'PKCE S256 Generator'
@@ -973,7 +895,7 @@ export default function Docs() {
                       : 'UserInfo Claims'}
                   </span>
                   <button
-                    className="btn btn-outline btn-sm"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-[var(--color-border)] text-[var(--color-sub)] bg-transparent hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)] transition-colors shrink-0 cursor-pointer"
                     onClick={() =>
                       copyToClipboard(
                         `code-${selectedLang}-${activeCodeStage}`,
@@ -989,28 +911,19 @@ export default function Docs() {
                   >
                     {copiedMap[`code-${selectedLang}-${activeCodeStage}`] ? (
                       <>
-                        <Check size={14} color="#10b981" />
-                        <span style={{ color: '#10b981', fontWeight: 600 }}>Copied Code!</span>
+                        <Check size={13} className="text-emerald-400" />
+                        <span className="text-emerald-400 font-semibold">Copied Code!</span>
                       </>
                     ) : (
                       <>
-                        <Copy size={14} />
+                        <Copy size={13} />
                         <span>Copy Code</span>
                       </>
                     )}
                   </button>
                 </div>
 
-                <pre
-                  className="code-block"
-                  style={{
-                    borderTopLeftRadius: 0,
-                    borderTopRightRadius: 0,
-                    maxHeight: '380px',
-                    margin: 0,
-                    border: 'none'
-                  }}
-                >
+                <pre className="p-4 font-mono text-xs text-slate-200 overflow-x-auto max-h-[380px] leading-relaxed">
                   {activeCodeStage === 'pkce' && langInfo.pkceCode}
                   {activeCodeStage === 'init' && langInfo.clientInitCode}
                   {activeCodeStage === 'exchange' && langInfo.tokenExchangeCode}
@@ -1021,124 +934,92 @@ export default function Docs() {
           </section>
 
           {/* SECTION 3: Interactive API & Endpoint Reference */}
-          <section id="api-reference" style={{ marginBottom: '2.5rem' }}>
-            <div className="card card-glow">
-              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
+          <section id="api-reference" className="scroll-mt-24 space-y-4">
+            <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-5 sm:p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2>3. Interactive API & Post-Quantum Identity Reference</h2>
-                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                  <h2 className="text-lg font-semibold text-[var(--color-txt)]">3. Interactive API &amp; Post-Quantum Identity Reference</h2>
+                  <p className="text-[var(--color-sub)] text-xs sm:text-sm mt-0.5">
                     Test endpoints, configure live parameters (Client ID, Redirect URI, Token Strategy), and inspect exact response formats.
                   </p>
                 </div>
-                <span className="badge badge-confidential">Live Interactive Playground</span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-cyan-500/15 border border-cyan-500/30 text-cyan-300">
+                  Live Interactive Playground
+                </span>
               </div>
 
-              <div className="api-ref-grid">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Endpoint List Sidebar */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <div className="detail-label" style={{ marginBottom: '0.4rem' }}>DilithiAuth Endpoints</div>
+                <div className="lg:col-span-4 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-sub)] mb-2">DilithiAuth Endpoints</div>
 
-                  <button
-                    onClick={() => setSelectedEndpoint('discovery')}
-                    className={`btn ${selectedEndpoint === 'discovery' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                  >
-                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/.well-known/openid-configuration</span>
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedEndpoint('jwks')}
-                    className={`btn ${selectedEndpoint === 'jwks' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                  >
-                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/.well-known/jwks.json</span>
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedEndpoint('authorize')}
-                    className={`btn ${selectedEndpoint === 'authorize' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                  >
-                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                    <span>/authorize (PKCE)</span>
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedEndpoint('token')}
-                    className={`btn ${selectedEndpoint === 'token' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                  >
-                    <span className="badge badge-confidential" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>POST</span>
-                    <span>/token</span>
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedEndpoint('userinfo')}
-                    className={`btn ${selectedEndpoint === 'userinfo' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                  >
-                    <span className="badge badge-public" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>GET</span>
-                    <span>/userinfo</span>
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedEndpoint('revoke')}
-                    className={`btn ${selectedEndpoint === 'revoke' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ justifyContent: 'flex-start', fontSize: '0.8rem', textAlign: 'left' }}
-                  >
-                    <span className="badge badge-confidential" style={{ padding: '1px 4px', fontSize: '0.65rem' }}>POST</span>
-                    <span>/revoke</span>
-                  </button>
+                  {[
+                    { key: 'discovery', method: 'GET', path: '/.well-known/openid', badge: 'bg-emerald-500/15 text-emerald-400' },
+                    { key: 'jwks', method: 'GET', path: '/.well-known/jwks.json', badge: 'bg-emerald-500/15 text-emerald-400' },
+                    { key: 'authorize', method: 'GET', path: '/authorize (PKCE)', badge: 'bg-emerald-500/15 text-emerald-400' },
+                    { key: 'token', method: 'POST', path: '/token', badge: 'bg-cyan-500/15 text-cyan-400' },
+                    { key: 'userinfo', method: 'GET', path: '/userinfo', badge: 'bg-emerald-500/15 text-emerald-400' },
+                    { key: 'revoke', method: 'POST', path: '/revoke', badge: 'bg-cyan-500/15 text-cyan-400' },
+                  ].map(({ key, method, path, badge }) => (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedEndpoint(key as EndpointKey)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono text-left transition-colors cursor-pointer border ${
+                        selectedEndpoint === key
+                          ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                          : 'bg-transparent text-[var(--color-sub)] border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)]'
+                      }`}
+                    >
+                      <span className={`px-1.5 py-0.5 rounded text-[0.65rem] font-bold ${badge}`}>
+                        {method}
+                      </span>
+                      <span className="truncate">{path}</span>
+                    </button>
+                  ))}
                 </div>
 
                 {/* Endpoint Tester & Inspector */}
-                <div style={{ minWidth: 0 }}>
+                <div className="lg:col-span-8 space-y-4 min-w-0">
                   {/* Interactive Controls Header */}
-                  <div
-                    style={{
-                      background: '#0b0f19',
-                      border: '1px solid #1f2937',
-                      borderRadius: '6px',
-                      padding: '0.85rem',
-                      marginBottom: '1rem'
-                    }}
-                  >
-                    <div className="detail-label" style={{ marginBottom: '0.6rem' }}>Interactive Parameter Inputs</div>
-                    <div className="param-inputs-grid">
+                  <div className="p-4 bg-[#080d19] border border-[var(--color-border)] rounded-lg space-y-3">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-sub)]">Interactive Parameter Inputs</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <label className="label">Client ID</label>
+                        <label className="block text-[var(--color-sub)] mb-1 font-medium">Client ID</label>
                         <input
                           type="text"
                           value={clientId}
                           onChange={(e) => setClientId(e.target.value)}
                           placeholder="Client ID"
+                          className="w-full px-2.5 py-1.5 bg-[var(--color-input)] border border-[var(--color-border)] rounded text-[var(--color-txt)] focus:outline-none focus:border-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="label">Redirect URI</label>
+                        <label className="block text-[var(--color-sub)] mb-1 font-medium">Redirect URI</label>
                         <input
                           type="text"
                           value={redirectUri}
                           onChange={(e) => setRedirectUri(e.target.value)}
                           placeholder="Redirect URI"
+                          className="w-full px-2.5 py-1.5 bg-[var(--color-input)] border border-[var(--color-border)] rounded text-[var(--color-txt)] focus:outline-none focus:border-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="label">User Subject (sub)</label>
+                        <label className="block text-[var(--color-sub)] mb-1 font-medium">User Subject (sub)</label>
                         <input
                           type="text"
                           value={subject}
                           onChange={(e) => setSubject(e.target.value)}
                           placeholder="Subject email/ID"
+                          className="w-full px-2.5 py-1.5 bg-[var(--color-input)] border border-[var(--color-border)] rounded text-[var(--color-txt)] focus:outline-none focus:border-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="label">Token Strategy</label>
+                        <label className="block text-[var(--color-sub)] mb-1 font-medium">Token Strategy</label>
                         <select
                           value={tokenStrategy}
                           onChange={(e) => setTokenStrategy(e.target.value as TokenStrategy)}
+                          className="w-full px-2.5 py-1.5 bg-[var(--color-input)] border border-[var(--color-border)] rounded text-[var(--color-txt)] focus:outline-none focus:border-blue-500"
                         >
                           <option value="thin">Thin Token (Ed25519 + pqc_ref)</option>
                           <option value="full">Jumbo Token (Embedded ML-DSA-44)</option>
@@ -1148,91 +1029,52 @@ export default function Docs() {
                     </div>
                   </div>
 
-                  {/* Response Preview Header (R2 Wrapped URL & Button Protection) */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      borderBottom: '1px solid #1f2937',
-                      paddingBottom: '0.5rem',
-                      marginBottom: '0.75rem',
-                      flexWrap: 'wrap',
-                      gap: '0.75rem'
-                    }}
-                  >
-                    <div className="flex items-center gap-2" style={{ minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
-                      <span
-                        className={`badge ${
-                          endpointRes.method === 'GET' ? 'badge-public' : 'badge-confidential'
-                        }`}
-                        style={{ flexShrink: 0 }}
-                      >
+                  {/* Response Preview Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--color-border)]">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono ${endpointRes.method === 'GET' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-cyan-500/15 text-cyan-400'}`}>
                         {endpointRes.method}
                       </span>
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: '0.85rem',
-                          color: '#f9fafb',
-                          wordBreak: 'break-all',
-                          maxWidth: '100%'
-                        }}
-                      >
+                      <span className="font-mono text-xs text-slate-100 break-all">
                         {endpointRes.url}
                       </span>
-                      <span
-                        className="badge"
-                        style={{
-                          background: 'rgba(5, 150, 105, 0.15)',
-                          color: '#6ee7b7',
-                          border: '1px solid rgba(5, 150, 105, 0.3)',
-                          flexShrink: 0
-                        }}
-                      >
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 shrink-0">
                         {endpointRes.status} {endpointRes.statusText}
                       </span>
                     </div>
 
-                    <div className="flex gap-2" style={{ flexShrink: 0 }}>
-                      <button
-                        className={`btn btn-sm ${endpointTab === 'body' ? 'btn-primary' : 'btn-outline'}`}
-                        onClick={() => setEndpointTab('body')}
-                      >
-                        Body
-                      </button>
-                      <button
-                        className={`btn btn-sm ${endpointTab === 'headers' ? 'btn-primary' : 'btn-outline'}`}
-                        onClick={() => setEndpointTab('headers')}
-                      >
-                        Headers
-                      </button>
-                      <button
-                        className={`btn btn-sm ${endpointTab === 'metrics' ? 'btn-primary' : 'btn-outline'}`}
-                        onClick={() => setEndpointTab('metrics')}
-                      >
-                        PQC Metrics
-                      </button>
+                    <div className="flex gap-1 shrink-0">
+                      {(['body', 'headers', 'metrics'] as const).map((t) => (
+                        <button
+                          key={t}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer ${
+                            endpointTab === t
+                              ? 'bg-[var(--color-primary)] text-white'
+                              : 'bg-transparent text-[var(--color-sub)] border border-[var(--color-border)] hover:bg-[var(--color-hover)]'
+                          }`}
+                          onClick={() => setEndpointTab(t)}
+                        >
+                          {t === 'body' ? 'Body' : t === 'headers' ? 'Headers' : 'PQC Metrics'}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Inspector Output Panels (R2 Code Header Strip Protection) */}
+                  {/* Inspector Output Panels */}
                   {endpointTab === 'body' && (
-                    <div className="code-card">
-                      <div className="code-header">
-                        <span className="mono" style={{ fontSize: '0.75rem' }}>
-                          Response Body (JSON)
-                        </span>
+                    <div className="border border-[var(--color-border)] rounded-lg overflow-hidden bg-[#050810]">
+                      <div className="flex items-center justify-between px-4 py-2 bg-[#0b0f19] border-b border-[var(--color-border)] text-xs font-mono text-gray-400">
+                        <span>Response Body (JSON)</span>
                         <button
-                          className="btn btn-outline btn-sm"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded border border-[var(--color-border)] text-[var(--color-sub)] bg-transparent hover:bg-[var(--color-hover)] hover:text-[var(--color-txt)] transition-colors cursor-pointer"
                           onClick={() =>
                             copyToClipboard(`res-body-${selectedEndpoint}-${tokenStrategy}`, JSON.stringify(endpointRes.body, null, 2))
                           }
                         >
                           {copiedMap[`res-body-${selectedEndpoint}-${tokenStrategy}`] ? (
                             <>
-                              <Check size={13} color="#10b981" />
-                              <span style={{ color: '#10b981' }}>Copied</span>
+                              <Check size={13} className="text-emerald-400" />
+                              <span className="text-emerald-400">Copied</span>
                             </>
                           ) : (
                             <>
@@ -1242,27 +1084,18 @@ export default function Docs() {
                           )}
                         </button>
                       </div>
-                      <pre
-                        className="code-block"
-                        style={{
-                          borderTopLeftRadius: 0,
-                          borderTopRightRadius: 0,
-                          maxHeight: '340px',
-                          margin: 0,
-                          border: 'none'
-                        }}
-                      >
+                      <pre className="p-4 font-mono text-xs text-slate-200 overflow-x-auto max-h-[340px] leading-relaxed">
                         {JSON.stringify(endpointRes.body, null, 2)}
                       </pre>
                     </div>
                   )}
 
                   {endpointTab === 'headers' && (
-                    <div className="code-card">
-                      <div className="code-header">
-                        <span className="mono" style={{ fontSize: '0.75rem' }}>Response Headers</span>
+                    <div className="border border-[var(--color-border)] rounded-lg overflow-hidden bg-[#050810]">
+                      <div className="px-4 py-2 bg-[#0b0f19] border-b border-[var(--color-border)] text-xs font-mono text-gray-400">
+                        Response Headers
                       </div>
-                      <pre className="code-block" style={{ maxHeight: '340px', margin: 0, border: 'none' }}>
+                      <pre className="p-4 font-mono text-xs text-slate-200 overflow-x-auto max-h-[340px] leading-relaxed">
                         {Object.entries(endpointRes.headers)
                           .map(([k, v]) => `${k}: ${v}`)
                           .join('\n')}
@@ -1271,31 +1104,24 @@ export default function Docs() {
                   )}
 
                   {endpointTab === 'metrics' && (
-                    <div
-                      style={{
-                        background: '#060911',
-                        border: '1px solid #1f2937',
-                        borderRadius: '6px',
-                        padding: '1rem'
-                      }}
-                    >
-                      <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#60a5fa' }}>
+                    <div className="p-4 bg-[#060911] border border-[var(--color-border)] rounded-lg space-y-3">
+                      <h3 className="text-xs font-bold text-sky-400 uppercase tracking-wider">
                         Post-Quantum Signature Specification Breakdown
                       </h3>
-                      <ul style={{ paddingLeft: '1.2rem', color: 'var(--text-sub)', fontSize: '0.85rem', lineHeight: '1.7' }}>
+                      <ul className="space-y-2 text-xs text-[var(--color-sub)] leading-relaxed list-disc list-inside">
                         <li>
-                          <strong>Ed25519 Classical Signature Size:</strong> <span className="mono">64 Bytes</span>
+                          <strong>Ed25519 Classical Signature Size:</strong> <span className="font-mono text-slate-200">64 Bytes</span>
                         </li>
                         <li>
-                          <strong>NIST ML-DSA-44 Signature Size:</strong> <span className="mono">2,420 Bytes</span>
+                          <strong>NIST ML-DSA-44 Signature Size:</strong> <span className="font-mono text-slate-200">2,420 Bytes</span>
                         </li>
                         <li>
                           <strong>Selected Token Mode ({tokenStrategy.toUpperCase()}):</strong>{' '}
                           {tokenStrategy === 'thin' && (
-                            <span>Standard JWT (~500 Bytes) + SigStore <span className="mono">pqc_ref</span> Hash</span>
+                            <span>Standard JWT (~500 Bytes) + SigStore <span className="font-mono text-emerald-400">pqc_ref</span> Hash</span>
                           )}
                           {tokenStrategy === 'full' && (
-                            <span>Jumbo Embedded JWT (~3,840 Bytes) with full <span className="mono">pqc_sig</span> claim</span>
+                            <span>Jumbo Embedded JWT (~3,840 Bytes) with full <span className="font-mono text-amber-400">pqc_sig</span> claim</span>
                           )}
                           {tokenStrategy === 'cwt' && (
                             <span>Binary CBOR Web Token (~284 Bytes RFC 8392 format)</span>
@@ -1303,7 +1129,7 @@ export default function Docs() {
                         </li>
                         <li>
                           <strong>DilithiAuth Server Proxy Configuration:</strong>{' '}
-                          <span className="mono">MaxHeaderBytes = 16 KiB (16,384 Bytes)</span>
+                          <span className="font-mono text-slate-200">MaxHeaderBytes = 16 KiB (16,384 Bytes)</span>
                         </li>
                       </ul>
                     </div>
@@ -1314,75 +1140,72 @@ export default function Docs() {
           </section>
 
           {/* SECTION 4: Post-Quantum Token Architecture Comparison */}
-          <section id="token-strategies" style={{ marginBottom: '2.5rem' }}>
-            <div className="card">
-              <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: '1.25rem' }}>
+          <section id="token-strategies" className="scroll-mt-24 space-y-4">
+            <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-5 sm:p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2>4. Post-Quantum Token Strategy Architecture</h2>
-                  <p className="text-muted" style={{ fontSize: '0.85rem' }}>
+                  <h2 className="text-lg font-semibold text-[var(--color-txt)]">4. Post-Quantum Token Strategy Architecture</h2>
+                  <p className="text-[var(--color-sub)] text-xs sm:text-sm mt-0.5">
                     Solving the NIST ML-DSA-44 2.4 KB "token bloat" problem through modular token delivery mechanisms.
                   </p>
                 </div>
-                <span className="badge badge-hybrid">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-violet-500/15 border border-violet-500/30 text-violet-300">
                   <Cpu size={12} /> 16 KiB Header Engine
                 </span>
               </div>
 
-              <div className="features" style={{ padding: 0 }}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Thin Token Card */}
-                <div className="feature-card">
-                  <div className="feature-icon">
+                <div className="p-4 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] space-y-3 hover:border-blue-500/50 transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
                     <Layers size={20} />
                   </div>
-                  <h3>1. Thin Tokens (Recommended Default)</h3>
-                  <p style={{ marginBottom: '0.75rem' }}>
-                    JWT contains classical Ed25519 signature and a cryptographic SHA-256 hash reference (<span className="mono">pqc_ref</span>)
+                  <h3 className="font-semibold text-sm text-[var(--color-txt)]">1. Thin Tokens (Recommended Default)</h3>
+                  <p className="text-xs text-[var(--color-sub)] leading-relaxed">
+                    JWT contains classical Ed25519 signature and a cryptographic SHA-256 hash reference (<span className="font-mono text-emerald-400">pqc_ref</span>)
                     pointing to the ML-DSA-44 signature stored out-of-band in SigStore (Redis/Memory).
                   </p>
-                  <div className="detail-label">Size & Compatibility</div>
-                  <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>
+                  <div className="pt-2 border-t border-[var(--color-border)] text-xs font-mono text-emerald-400">
                     ~500 Bytes • Zero Proxy Header Bloat
                   </div>
                 </div>
 
                 {/* Jumbo Token Card */}
-                <div className="feature-card">
-                  <div className="feature-icon">
+                <div className="p-4 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] space-y-3 hover:border-blue-500/50 transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center">
                     <Key size={20} />
                   </div>
-                  <h3>2. Jumbo Tokens (Full Embedded)</h3>
-                  <p style={{ marginBottom: '0.75rem' }}>
-                    JWT directly embeds the entire ~2.4 KB ML-DSA-44 signature inside the <span className="mono">pqc_sig</span> claim.
+                  <h3 className="font-semibold text-sm text-[var(--color-txt)]">2. Jumbo Tokens (Full Embedded)</h3>
+                  <p className="text-xs text-[var(--color-sub)] leading-relaxed">
+                    JWT directly embeds the entire ~2.4 KB ML-DSA-44 signature inside the <span className="font-mono text-amber-400">pqc_sig</span> claim.
                     Fully self-contained for offline verification without cache lookups.
                   </p>
-                  <div className="detail-label">Size & Header Config</div>
-                  <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#fcd34d' }}>
+                  <div className="pt-2 border-t border-[var(--color-border)] text-xs font-mono text-amber-400">
                     ~4.0 KB • MaxHeaderBytes = 16 KiB
                   </div>
                 </div>
 
                 {/* CBOR Web Token Card */}
-                <div className="feature-card">
-                  <div className="feature-icon">
+                <div className="p-4 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] space-y-3 hover:border-blue-500/50 transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center">
                     <ChevronRight size={20} />
                   </div>
-                  <h3>3. CBOR Web Tokens (CWT RFC 8392)</h3>
-                  <p style={{ marginBottom: '0.75rem' }}>
+                  <h3 className="font-semibold text-sm text-[var(--color-txt)]">3. CBOR Web Tokens (CWT RFC 8392)</h3>
+                  <p className="text-xs text-[var(--color-sub)] leading-relaxed">
                     Binary encoded token using CBOR integer claim mapping (1:iss, 2:sub, 4:exp, 8:pqc_ref).
                     Delivers 25-30% footprint reduction for low-bandwidth mobile and IoT networks.
                   </p>
-                  <div className="detail-label">Size & Encoding</div>
-                  <div className="mono mt-1" style={{ fontSize: '0.75rem', color: '#38bdf8' }}>
+                  <div className="pt-2 border-t border-[var(--color-border)] text-xs font-mono text-sky-400">
                     ~280 Bytes • Binary Compact Format
                   </div>
                 </div>
               </div>
 
               {/* Architecture Footer Callout */}
-              <div className="alert alert-info" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
-                <Shield size={16} />
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs sm:text-sm flex items-start gap-3 leading-relaxed">
+                <Shield size={18} className="shrink-0 mt-0.5" />
                 <div>
-                  <strong>Reverse Proxy Configuration Note:</strong> When operating Jumbo Tokens in production, reverse proxies (Nginx, Envoy, Cloudflare) must be configured with <span className="mono">large_client_header_buffers 4 16k;</span> to accommodate ~4 KB Authorization header tokens.
+                  <strong>Reverse Proxy Configuration Note:</strong> When operating Jumbo Tokens in production, reverse proxies (Nginx, Envoy, Cloudflare) must be configured with <span className="font-mono bg-blue-950 px-1.5 py-0.5 rounded text-blue-200">large_client_header_buffers 4 16k;</span> to accommodate ~4 KB Authorization header tokens.
                 </div>
               </div>
             </div>
@@ -1390,13 +1213,22 @@ export default function Docs() {
         </main>
 
         {/* Right Sticky Table of Contents (Desktop ≥1024px) */}
-        <aside className="docs-toc">
-          <div className="toc-title">On This Page</div>
-          <a href="#quickstart" className="toc-link">1. SDK Quickstart</a>
-          <a href="#code-snippets" className="toc-link">2. Code Snippets</a>
-          <a href="#api-reference" className="toc-link">3. API Reference</a>
-          <a href="#token-strategies" className="toc-link">4. PQC Token Strategies</a>
+        <aside className="hidden lg:block w-48 shrink-0 sticky top-[76px] space-y-2 text-xs border-l border-[var(--color-border)] pl-4">
+          <div className="font-bold text-[var(--color-sub)] uppercase tracking-wider mb-2">On This Page</div>
+          <a href="#quickstart" className="block text-[var(--color-sub)] hover:text-blue-400 transition-colors py-1">
+            1. SDK Quickstart
+          </a>
+          <a href="#code-snippets" className="block text-[var(--color-sub)] hover:text-blue-400 transition-colors py-1">
+            2. Code Snippets
+          </a>
+          <a href="#api-reference" className="block text-[var(--color-sub)] hover:text-blue-400 transition-colors py-1">
+            3. API Reference
+          </a>
+          <a href="#token-strategies" className="block text-[var(--color-sub)] hover:text-blue-400 transition-colors py-1">
+            4. PQC Token Strategies
+          </a>
         </aside>
+
       </div>
     </div>
   )
