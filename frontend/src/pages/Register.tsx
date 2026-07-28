@@ -194,7 +194,7 @@ export default function Register() {
                 </span>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div className="social-btn-group">
                 <a
                   href="https://dilithiauthapis.gradientgeeks.tech/api/v1/bff/login?provider=google"
                   className="btn btn-outline"

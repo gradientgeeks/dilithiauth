@@ -128,7 +128,7 @@ export default function Dashboard() {
             )}
           </div>
         ) : (
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="card" style={{ padding: 0, overflowX: 'auto', maxWidth: '100%' }}>
             <table>
               <thead>
                 <tr>
