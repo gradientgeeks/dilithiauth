@@ -1,0 +1,10 @@
+{
+  "latestErrorEvent": {
+    "code": "TYPE-001",
+    "message": "Failed to generate type declaration. Execute the below cmd to reproduce and fix the error. #TYPE-001\nargs: {\"cmd\":\"/home/uttam/.nvm/versions/node/v24.17.0/bin/node /home/uttam/projects/DilithiAuth/docs-frontend/node_modules/typescript/bin/tsc --project /home/uttam/projects/DilithiAuth/docs-frontend/node_modules/.federation/tsconfig.24e51f0306fee8005127ca2d631bd629.json\"}\nView the docs to see how to solve: https://module-federation.io/guide/troubleshooting/type#type-001",
+    "args": {
+      "cmd": "/home/uttam/.nvm/versions/node/v24.17.0/bin/node /home/uttam/projects/DilithiAuth/docs-frontend/node_modules/typescript/bin/tsc --project /home/uttam/projects/DilithiAuth/docs-frontend/node_modules/.federation/tsconfig.24e51f0306fee8005127ca2d631bd629.json"
+    },
+    "timestamp": 1785248991301
+  }
+}

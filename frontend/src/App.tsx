@@ -6,7 +6,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import NewApp from './pages/NewApp'
 import AppDetail from './pages/AppDetail'
-import Docs from './pages/Docs'
+import DocsLoader from './pages/DocsLoader'  // ← Micro frontend loader (lazy remote)
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 
@@ -30,7 +30,14 @@ export default function App() {
           <Route path="/" element={<RequireGuest><Landing /></RequireGuest>} />
           <Route path="/login" element={<RequireGuest><Login /></RequireGuest>} />
           <Route path="/register" element={<RequireGuest><Register /></RequireGuest>} />
-          <Route path="/docs" element={<Docs />} />
+
+          {/*
+           * /docs is served by the Docs MICRO FRONTEND (docs-frontend/).
+           * DocsLoader wraps the lazy remote import with a Suspense skeleton
+           * and an Error boundary — no bundle-time dependency on Docs.tsx.
+           */}
+          <Route path="/docs" element={<DocsLoader />} />
+
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/apps" element={<RequireAuth><Dashboard /></RequireAuth>} />
