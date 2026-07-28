@@ -84,8 +84,40 @@ func (h *Handlers) requireSession(next http.Handler) http.Handler {
 		// primary da_sess path above, so the two can't drift out of sync.
 		if bffCookie, bffErr := r.Cookie("dilithiauth_bff_session"); bffErr == nil && bffCookie.Value != "" {
 			if c, pErr := ParseSessionJWT(bffCookie.Value, h.SessionSecret); pErr == nil {
-				if c.DeveloperID == "" && c.Subject != "" {
-					c.DeveloperID = c.Subject
+				if c.DeveloperID == "" {
+					// The BFF authenticates against the end-user account
+					// system (pkg/oauth), not developer_accounts — its
+					// session carries an end-user Subject (e.g. "usr_..."),
+					// which is never a valid developer_accounts.id. Using it
+					// directly as DeveloperID would violate the
+					// oauth_apps_developer_id_fkey constraint the first time
+					// this identity tries to create an app. Instead, resolve
+					// (or just-in-time provision) the matching developer
+					// account by the verified email the BFF now supplies.
+					if c.Email != "" {
+						dev, devErr := h.Store.GetDeveloperByEmail(r.Context(), c.Email)
+						if devErr != nil || dev == nil {
+							name := c.Name
+							if name == "" {
+								name = c.Email
+							}
+							dev, devErr = h.Store.RegisterDeveloper(r.Context(), c.Email, name, mustRandomHex(16))
+							if devErr != nil || dev == nil {
+								// Lost a race with a concurrent request
+								// provisioning the same account.
+								dev, devErr = h.Store.GetDeveloperByEmail(r.Context(), c.Email)
+							} else {
+								_ = h.Store.MarkEmailVerified(r.Context(), c.Email)
+							}
+						}
+						if dev != nil {
+							c.DeveloperID = dev.ID
+						}
+					}
+					if c.DeveloperID == "" {
+						writeError(w, http.StatusUnauthorized, "unable to resolve developer account for this session")
+						return
+					}
 				}
 				if h.sessionRevoked(c.ID) {
 					writeError(w, http.StatusUnauthorized, "session has been revoked")

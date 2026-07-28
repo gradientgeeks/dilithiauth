@@ -200,15 +200,24 @@ func TestCreateApp_RequiresValidCSRFToken_ViaBFFSessionCookie(t *testing.T) {
 	h := newTestHandlers()
 	router := h.Router()
 
+	// The BFF session carries an end-user Subject (e.g. "usr_...") which is
+	// never a valid developer_accounts.id — requireSession must resolve (or
+	// just-in-time provision) a real developer account via the verified
+	// Email claim instead of using Subject directly as DeveloperID, or
+	// CreateApp would violate the oauth_apps_developer_id_fkey constraint
+	// against Postgres (the in-memory store used here doesn't enforce that,
+	// so this only surfaces in production without this coverage).
 	bffClaims := struct {
 		jwt.RegisteredClaims
 		Subject string `json:"sub"`
+		Email   string `json:"email,omitempty"`
 		CSRF    string `json:"csrf,omitempty"`
 	}{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},
-		Subject: "bff-user-1",
+		Subject: "usr_bff1234567890ab",
+		Email:   "bff-user@example.com",
 		CSRF:    "bff-csrf-token-value",
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, bffClaims)
