@@ -113,7 +113,9 @@ func ClearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
 	})
 }
 

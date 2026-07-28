@@ -56,7 +56,14 @@ export const auth = {
     if (res.data.csrf_token) csrfToken = res.data.csrf_token
     return res
   },
-  logout: () => api.post('/logout'),
+  logout: async () => {
+    csrfToken = undefined
+    const bffUrl = (import.meta.env.VITE_API_BASE_URL || 'https://dilithiauthapis.gradientgeeks.tech/api/v1/developer').replace('/api/v1/developer', '') + '/api/v1/bff/logout'
+    await Promise.allSettled([
+      api.post('/logout'),
+      axios.post(bffUrl, {}, { withCredentials: true })
+    ])
+  },
   me: async () => {
     const res = await axios.get<Developer>(
       (import.meta.env.VITE_API_BASE_URL || 'https://dilithiauthapis.gradientgeeks.tech/api/v1/developer').replace('/api/v1/developer', '') + '/api/v1/bff/me',
