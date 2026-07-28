@@ -1,100 +1,101 @@
-# Handoff Report — Milestone M1 Explorer 1
-
-**Agent:** Explorer 1  
-**Working Directory:** `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_1`  
-**Date:** 2026-07-27  
-**Status:** Task Complete (Hard Handoff)
-
----
+# Handoff Report: Cryptographic Survey of `pkg/signer` in DilithiAuth
 
 ## 1. Observation
 
-- **`frontend/package.json`**:
-  - React version: `"react": "^19.2.5"`, `"react-dom": "^19.2.5"` (lines 15-16).
-  - Router version: `"react-router-dom": "^7.14.2"` (line 17).
-  - Icons: `"lucide-react": "^1.27.0"` (line 14).
-  - HTTP client: `"axios": "^1.15.2"` (line 13).
-  - Syntax Highlighting Libraries: **None installed** in `dependencies` or `devDependencies`.
-  - Vite: `"vite": "^8.0.10"`, `"@vitejs/plugin-react": "^6.0.1"` (lines 24, 31).
+Direct code examination of `pkg/signer/` and its dependent packages (`pkg/oauth`, `pkg/verifier`, `pkg/transport`) revealed the following exact implementation details and byte specifications:
 
-- **`frontend/vite.config.ts`**:
-  - Proxy configuration: `/api` requests target `'https://dilithiauthapis.gradientgeeks.tech'` (line 8).
-  - Build configuration: `outDir: 'dist'`, `emptyOutDir: true` (lines 12-13).
+### File Locations and Code Anchors
+- **`pkg/signer/signer.go`**:
+  - `HybridKeyPair` struct (`signer.go:20-31`): Combines `Kid` (string), `Ed25519Public` / `Ed25519Private` (`crypto/ed25519`), and `MLDSAPublic` / `MLDSAPrivate` (`github.com/cloudflare/circl/sign/mldsa/mldsa44`).
+  - `HybridSignature` struct (`signer.go:36-39`): Fields `Ed25519Sig` (`[]byte`, 64 bytes) and `MLDSASig` (`[]byte`, 2,420 bytes).
+  - `PublicKeyInfo` struct (`signer.go:43-47`): Contains `Kid`, `Ed25519Public` (32 bytes), and `MLDSAPublic` (1,312 bytes).
+  - `GenerateHybridKeyPair()` (`signer.go:52-79`): Generates 8 random bytes base64url-encoded as `Kid` (11 chars), Ed25519 keypair via `ed25519.GenerateKey(rand.Reader)`, and ML-DSA-44 keypair via `mldsa44.GenerateKey(rand.Reader)`.
+  - `Sign(msg []byte)` (`signer.go:84-101`): Produces both `ed25519.Sign(kp.Ed25519Private, msg)` (64 bytes) and `mldsa44.SignTo(kp.MLDSAPrivate, msg, nil, false, mlSig)` (2,420 bytes).
+  - Verification methods (`signer.go:107-127`): `VerifyEd25519` via `ed25519.Verify`, `VerifyMLDSA` via `mldsa44.Verify`, and `VerifyBoth` checking both signatures.
+- **`pkg/signer/keymanager.go`**:
+  - `KeyManager` struct (`keymanager.go:11-18`): Thread-safe `sync.RWMutex` managing key sets, active key pointer `activeKid`, 10-second refresh delay cache (`lastRefresh`), and `KeyStore` backend interface.
+  - Key Lifecycle: `NewKeyManagerWithStore` (`keymanager.go:21-45`), `Rotate()` (`keymanager.go:139-160`), `KeyByKid()` (`keymanager.go:105-123`), `AllPublicKeys()` (`keymanager.go:126-136`).
+- **`pkg/signer/keystore.go`**:
+  - `KeyStore` interface (`keystore.go:12-18`): `Save`, `Load`, `LoadAll`, `SetActiveKid`, `GetActiveKid`.
+  - `MarshalKeyPair` / `UnmarshalKeyPair` (`keystore.go:30-65`): JSON serialization using `mldsa44.PublicKey.UnmarshalBinary` and `mldsa44.PrivateKey.UnmarshalBinary`.
+- **`pkg/signer/file_keystore.go`**:
+  - `FileKeyStore` (`file_keystore.go:12-90`): Filesystem storage writing `<kid>.json` with mode `0600` and `active_kid.txt`.
+- **`pkg/signer/redis_keystore.go`**:
+  - `RedisKeyStore` (`redis_keystore.go:12-109`): Redis-backed storage using prefix keys (`dilithiauth:keys:<kid>`, `prefix+all`, `prefix+active`).
 
-- **`frontend/src/App.tsx`**:
-  - Declares routes for `/`, `/login`, `/register`, `/apps`, `/apps/new`, `/apps/:id`, and catch-all fallback `*` (lines 27-33). Does not currently contain a `/docs` route.
+### Cryptographic Parameters and Exact Byte Counts
 
-- **`frontend/src/components/Navbar.tsx`**:
-  - Renders sticky header (`height: 56px`, `background: #111827`, `border-bottom: 1px solid #1f2937`) with brand badge `PQC IdP` and navigation action links using Lucide icons (`ShieldCheck`, `LogIn`, `UserPlus`, `LayoutGrid`, `LogOut`, `Mail`) (lines 18-53).
-
-- **`frontend/src/index.css`**:
-  - Defines root CSS tokens: `--bg-dark: #0b0f19`, `--bg-card: #111827`, `--border-color: #1f2937`, `--border-focus: #2563eb`, `--primary: #2563eb`, `--emerald: #059669`, `--amber: #d97706`, `--rose: #dc2626`, `--text-main: #f9fafb`, `--text-sub: #9ca3af`, `--text-muted: #6b7280`, `--font-sans: 'Inter'`, `--font-mono: 'JetBrains Mono'`, `--radius-sm: 6px`, `--radius: 8px` (lines 7-34).
-  - Card components: `.card`, `.card-glow`, `.feature-card`, `.stat-card` (lines 169-180, 475-503, 692-715).
-  - Tab patterns: `.tab-header`, `.tab-btn`, `.tab-btn.active` (lines 506-535).
-  - Button styling: `.btn`, `.btn-primary`, `.btn-outline`, `.btn-danger`, `.btn-sm`, `.btn-full` (lines 285-333).
-  - Monospace code containers: `.code-block`, `.secret-box`, `.mono` (lines 378-410).
-
-- **`frontend/src/components/QuantumTokenPlayground.tsx` & `frontend/src/pages/AppDetail.tsx`**:
-  - Use `.tab-header` and `.tab-btn` for tabbed sub-views (token strategies in playground; credentials, code snippets, and danger zone in app details).
-  - Use native `<pre className="code-block">` elements with clipboard copy handlers and `Check` icon visual indicators.
+| Primitive | Parameter / Field | Exact Byte Size | Bit Equivalent / Encoding |
+|---|---|---|---|
+| **Key ID** | `Kid` | 8 bytes raw | 11 chars (`base64.RawURLEncoding`) |
+| **Ed25519** | Public Key | **32 bytes** | 256 bits |
+| **Ed25519** | Private Key | **64 bytes** | 512 bits (seed + pubkey) |
+| **Ed25519** | Signature | **64 bytes** | 512 bits |
+| **ML-DSA-44** | Public Key | **1,312 bytes** | NIST FIPS 204 Category 1 |
+| **ML-DSA-44** | Private Key | **2,560 bytes** | NIST FIPS 204 Category 1 |
+| **ML-DSA-44** | Signature | **2,420 bytes** | NIST FIPS 204 Category 1 |
+| **PQC Reference**| `PQCRef` | 32 bytes SHA-256 | 43 chars (`base64.RawURLEncoding`) |
+| **Hybrid Signature** | `Ed25519Sig` + `MLDSASig` | **2,484 bytes** | Combined raw signature payload |
 
 ---
 
 ## 2. Logic Chain
 
-1. **Package Observation → Syntax Highlighting Strategy:**
-   - Observation: `frontend/package.json` contains no syntax highlighting libraries (e.g. `prismjs`, `shiki`, `react-syntax-highlighter`).
-   - Reasoning: Adding a heavy syntax highlighter package is unnecessary and violates zero-dependency addition conventions for M1.
-   - Conclusion: `Docs.tsx` should utilize the existing `.code-block` CSS styling (`font-family: var(--font-mono)`, `background: #060911`, `color: #e5e7eb`) with custom string formatting and copy buttons.
+1. **Hybrid Signature Construction**:
+   - DilithiAuth binds classical Ed25519 and PQC ML-DSA-44 under a single shared `Kid`.
+   - `GenerateHybridKeyPair()` generates Ed25519 (32B pub / 64B priv) and ML-DSA-44 (1,312B pub / 2,560B priv) simultaneously from `crypto/rand.Reader`.
+   - `Sign()` computes both signatures over identical payload bytes `msg`, returning a composite `HybridSignature` (64 bytes Ed25519 + 2,420 bytes ML-DSA-44 = 2,484 total signature bytes).
 
-2. **Styling & Tokens Observation → UI Architecture Strategy:**
-   - Observation: `index.css` establishes strict color variables (`--bg-dark: #0b0f19`, `--bg-card: #111827`, `--primary: #2563eb`), card styles (`.card`), tab patterns (`.tab-header`/`.tab-btn`), and badge styles (`.badge-hybrid`, `.badge-public`, `.badge-confidential`).
-   - Reasoning: To maintain aesthetic harmony across the app, `Docs.tsx` must reuse these exact CSS classes and design tokens without introducing incompatible custom CSS resets.
-   - Conclusion: `Docs.tsx` layout will use `.container` (`max-width: 980px`), `.page-header`, `.tab-header`, `.card`, and `.btn` variants.
+2. **NIST FIPS 204 Compliance and Security Guarantees**:
+   - ML-DSA-44 corresponds to Dilithium2, standardized under NIST FIPS 204.
+   - It relies on the computational hardness of Module Learning With Errors (M-LWE) and Module Short Integer Solution (M-SIS) in algebraic lattices (matrix dimensions $k=4, l=4$).
+   - Provides **NIST Security Category 1** protection (equivalent to AES-128 security against quantum search algorithms like Grover's and polynomial-time quantum period-finding like Shor's Algorithm).
 
-3. **Routing & Navigation Observation → Page Integration Strategy:**
-   - Observation: `App.tsx` defines client routes via React Router v7 (`react-router-dom: ^7.14.2`), and `Navbar.tsx` controls global header links.
-   - Reasoning: For developers to navigate to the SDK documentation page, `/docs` must be added to `App.tsx` and a `BookOpen` link added to `Navbar.tsx`.
-   - Conclusion: Deliver exact route and navbar edit recommendations in the analysis report and handoff.
+3. **Harvest Now, Decrypt Later (HNDL) Mitigation**:
+   - Adversaries currently harvest encrypted sessions and signed identity tokens for future decryption/forgery once Cryptographically Relevant Quantum Computers (CRQCs) emerge.
+   - Shor's algorithm will compromise Ed25519 (discrete logarithm problem on Curve25519), but cannot break ML-DSA-44 lattice problems.
+   - DilithiAuth's hybrid signatures ensure that even if Ed25519 is compromised by a future CRQC, the embedded or referenced ML-DSA-44 signature guarantees long-term non-repudiation and prevents historical token forgery.
 
-4. **Existing Feature Analysis → Interactive SDK Documentation Design:**
-   - Observation: `QuantumTokenPlayground.tsx` and `AppDetail.tsx` provide proven models for interactive parameter configuration, language tab switching (`cURL`, `JavaScript`, `Go`, `Python`, `Java`, `.NET`), and live code snippet rendering.
-   - Reasoning: Combining language selection with interactive form controls (Client ID, Redirect URI, Token Strategy, Scopes) inside `Docs.tsx` provides developers with immediate, executable SDK code tailored to their environment.
-   - Conclusion: Formulate component architecture in `analysis.md` with 5 modular sections (Header, Language Tabs, Interactive Playground, Token Strategy Explainer, ML-DSA-44 Signature Verification Guide).
+4. **Token Bloat Architecture Tradeoffs**:
+   - Embedding a 2,420-byte ML-DSA-44 signature directly into every JWT header ("Jumbo Token") inflates header size to ~3.5–4 KB, exceeding standard web infrastructure header limits.
+   - DilithiAuth addresses this by supporting **Thin Tokens** in `pkg/oauth` (`IssueJWTThinWithScope`) and `pkg/verifier` (`VerifyJWT`). The Thin Token contains the 64-byte Ed25519 signature and a 43-character SHA-256 reference (`PQCRef`) pointing to the 2,420-byte ML-DSA-44 signature stored in a sidecar store (`transport.SigStore` / Redis).
 
 ---
 
 ## 3. Caveats
 
-- **Backend API Availability:** The analysis assumes the live API proxy target `https://dilithiauthapis.gradientgeeks.tech` remains accessible for interactive testing during client SDK code execution.
-- **No Source Code Modifications:** As Explorer 1 operating under read-only investigation rules, no source files under `frontend/src/` or `frontend/package.json` were modified during this step. All proposals and recommendations are documented in `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_1/analysis.md`.
+1. **External Network Scope**:
+   - This investigation operated under `CODE_ONLY` mode. No external HTTP requests were made.
+2. **Third-Party PQC Implementation**:
+   - ML-DSA-44 primitives are supplied by `github.com/cloudflare/circl v1.6.3`. Internal lattice operations (e.g. polynomial sampling, NTT transformations) are encapsulated within CIRCL.
+3. **Redis Dependency**:
+   - `RedisKeyStore` requires a running Redis instance for integration/production environments; in unit tests and local runs, `FileKeyStore` or in-memory stores are used.
 
 ---
 
 ## 4. Conclusion
 
-The DilithiAuth frontend design system is clean, dark-themed, and highly structured around reusable CSS design tokens (`index.css`), Lucide icons, React Router v7, and custom card/tab components. 
+`pkg/signer` in DilithiAuth provides a robust, production-ready hybrid signature framework combining Ed25519 (64-byte signatures, 32-byte public keys) and NIST FIPS 204 ML-DSA-44 (2,420-byte signatures, 1,312-byte public keys) under a single key identifier (`Kid`).
 
-The detailed analysis report `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_1/analysis.md` provides an exact blueprint for `frontend/src/pages/Docs.tsx`, including:
-1. Complete package and Vite configuration breakdown.
-2. Comprehensive UI design system guide (color palette, typography, button variants, tab patterns, code blocks).
-3. Recommended component layout and architecture for `Docs.tsx` with interactive language switcher (JS/TS, Go, Python, Java, .NET, cURL) and token strategy configurator (Thin vs Jumbo vs CWT).
-4. Concrete code snippets and an actionable implementation checklist for the implementer agent.
+The implementation cleanly mitigates the **Harvest Now, Decrypt Later (HNDL)** threat model by securing identity tokens against quantum cryptanalysis while maintaining backwards compatibility and mitigating token bloat via Thin Tokens and sidecar signature stores.
 
 ---
 
 ## 5. Verification Method
 
-To verify the findings and analysis:
-1. **Inspect Analysis Report:**
+To independently verify these findings, execute the following commands in the workspace root `/home/uttam/projects/DilithiAuth`:
+
+1. **Run Unit Tests for `pkg/signer`**:
    ```bash
-   cat /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_1/analysis.md
+   go test -v ./pkg/signer/...
    ```
-2. **Verify Frontend Build & Type Consistency:**
+   *Expected Output*: All 12 unit tests in `signer_test.go` and `keystore_test.go` pass without errors (`PASS`, `ok github.com/Uttam-Mahata/DilithiAuth/pkg/signer`).
+
+2. **Inspect Byte Constant Sizes via Go**:
+   Inspect `github.com/cloudflare/circl/sign/mldsa/mldsa44` constants or verify test outputs in `TestPublicKeyInfo` (`len(info.Ed25519Public) == 32`, `len(info.MLDSAPublic) == 1312`).
+
+3. **Verify Full Project Integration**:
    ```bash
-   cd /home/uttam/projects/DilithiAuth/frontend && npm run build
+   go test ./...
    ```
-3. **Verify Project Go Test Suite:**
-   ```bash
-   cd /home/uttam/projects/DilithiAuth && go test ./...
-   ```
+   *Expected Output*: All package test suites (`pkg/signer`, `pkg/oauth`, `pkg/verifier`, `pkg/transport`, `pkg/bff`, `pkg/edgeproxy`, `pkg/tenant`, `pkg/ratelimit`, `tests`) pass cleanly.

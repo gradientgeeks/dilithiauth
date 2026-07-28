@@ -1,19 +1,14 @@
-# Technical Context — DilithiAuth
+# Context & Decisions — DilithiAuth Research Paper
 
-## Application Context
-- **IdP Core**: Post-Quantum Identity Provider (IdP) implementing NIST ML-DSA-44 (FIPS 204) + Ed25519 hybrid signatures.
-- **Frontend Stack**: React 18 / 19, TypeScript, Vite, Tailwind CSS, Lucide icons, React Router DOM.
-- **Key Frontend Files**:
-  - `frontend/src/App.tsx`: React router definitions (`/`, `/login`, `/register`, `/dashboard`, `/apps/:id`, `/new-app`, `/docs`).
-  - `frontend/src/components/Navbar.tsx`: Header navigation bar.
-  - `frontend/src/pages/Docs.tsx`: Target interactive documentation component to be built.
-- **Token Types**:
-  - Thin Tokens: Classical Ed25519 JWT + `pqc_ref` hash reference pointing to ML-DSA-44 signature stored in sidecar.
-  - Jumbo Tokens: Full ~4KB JWT embedding ML-DSA-44 post-quantum signature directly.
-  - CWT Tokens: CBOR Web Tokens (RFC 8392) optimized binary representations (20-30% smaller).
-- **Supported SDK Languages**:
-  1. TypeScript (`npm install @dilithiauth/sdk`)
-  2. Go (`go get github.com/DilithiAuth/dilithiauth-go`)
-  3. Python (`pip install dilithiauth`)
-  4. Java (`mvn dependency: add dilithiauth-sdk`)
-  5. .NET (`dotnet add package DilithiAuth.SDK`)
+## Project Goal
+Produce a formal academic research paper in IEEEtran LaTeX format (`paper/main.tex`, `paper/references.bib`, `paper/main.pdf`) analyzing DilithiAuth's post-quantum identity provider architecture, hybrid Ed25519 + ML-DSA-44 signatures, token strategies (Thin JWT, Jumbo JWT, CWT), and large header middleware.
+
+## Requirements Summary
+- R1: Technical & Cryptographic Survey of Go codebase (`pkg/signer`, `pkg/oauth`, `pkg/transport`, `cmd/server`).
+- R2: Formal Academic Research Paper in IEEEtran LaTeX (`paper/main.tex` with 7 sections + `paper/references.bib`).
+- R3: Automated PDF Compilation (`paper/main.pdf` generated cleanly with `pdflatex` & `bibtex`).
+
+## Architectural Decisions
+- Topology: Decomposed into 3 sequential milestones.
+- Benchmarks: Real empirical numbers to be measured from `pkg/signer`, `pkg/oauth`, `pkg/transport` unit/benchmark tests.
+- Audit & Verification: Gated by Forensic Auditor binary veto.

@@ -1,43 +1,54 @@
-# BRIEFING — 2026-07-27T22:55:30+05:30
+# BRIEFING — 2026-07-28T01:02:00Z
 
 ## Mission
-Apply targeted state logic refinements to `frontend/src/pages/Docs.tsx` and verify clean build.
+Apply LaTeX formatting refinements to paper/main.tex and paper/references.bib to resolve Reviewer 2 feedback and compile paper/main.pdf cleanly.
 
 ## 🔒 My Identity
-- Archetype: implementer, qa, specialist
+- Archetype: teamwork_preview_worker
 - Roles: implementer, qa, specialist
 - Working directory: /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_worker_refinements
-- Original parent: ec89e03f-2486-4ad3-b204-ca126741b2e7
-- Milestone: Docs.tsx State Logic Refinement
+- Original parent: 816dc588-4b69-4046-a9f6-f2d3dd90a087
+- Milestone: paper LaTeX refinements
 
 ## 🔒 Key Constraints
-- Follow minimal change principle.
-- No dummy/facade implementations or hardcoded shortcuts.
-- Report must be written to /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_worker_refinements/handoff.md.
+- Apply LaTeX formatting refinements to paper/main.tex and paper/references.bib to resolve Reviewer 2 feedback.
+- Cleanly re-compile paper/main.pdf.
+- 0 fatal errors, 0 undefined citations, resolve overfull warnings.
+- Genuine implementations only (no cheating/facades).
 
 ## Current Parent
-- Conversation ID: ec89e03f-2486-4ad3-b204-ca126741b2e7
-- Updated: 2026-07-27T22:55:30+05:30
+- Conversation ID: 816dc588-4b69-4046-a9f6-f2d3dd90a087
+- Updated: 2026-07-28T01:02:00Z
 
 ## Task Summary
-- **What to build**: State logic refinements to Docs.tsx (URL encoding, query string separator detection, dynamic access_token representation in /token endpoint response, fallback formatting in /userinfo response, copyToClipboard clipboard fallback + unique key keying by tokenStrategy).
-- **Success criteria**: All 5 specified points met and `npm run build` succeeds with 0 TypeScript/Vite errors.
+- **What to build**: LaTeX formatting fixes in paper/main.tex and references.bib, and compile main.pdf.
+- **Success criteria**: 0 fatal errors, 0 undefined citations, overfull hbox issues fixed, Grover's algorithm & RFC 6750 cited properly, hypersetup hidelinks/colorlinks=false, PDF generated cleanly.
+- **Interface contracts**: paper/main.tex, paper/references.bib, paper/main.pdf.
+- **Code layout**: paper/ directory.
 
 ## Key Decisions Made
-- Implemented `toBase64Url` helper to dynamically generate valid JWT headers and payloads matching custom `clientId` and `subject` inputs in `/token` endpoint simulation.
-- Used `const redirectSep = redirectUri.includes('?') ? '&' : '?'` in `/authorize` response calculation.
-- Converted `copyToClipboard` to async function with dual-layer fallback (`writeText` -> `execCommand('copy')`).
-- Appended `tokenStrategy` to endpoint response copy button key (`res-body-${selectedEndpoint}-${tokenStrategy}`) to isolate state feedback per strategy.
+- Updated `\hypersetup` to `hidelinks` for camera-ready submission compliance.
+- Resized Table I and Table II to `\columnwidth` and Table III to `\textwidth` using `\resizebox`.
+- Split long equations (JWT format equation 1, Jumbo JWT size model equation 8, HTTP bearer overhead equation 11) and aligned dual signature equations.
+- Formatted verbatim blocks with `\small` and truncated wide comments.
+- Added in-text citations for `grover1996` in Section V-A and `rfc6750` in Sections I & II-B alongside `rfc6749`.
+- Recompiled document using standard 4-pass pdflatex + bibtex sequence.
+
+## Artifact Index
+- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_worker_refinements/ORIGINAL_REQUEST.md — Original task prompt
+- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_worker_refinements/BRIEFING.md — Persistent memory index
+- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_worker_refinements/progress.md — Progress tracking
+- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_worker_refinements/handoff.md — Handoff report
 
 ## Change Tracker
-- **Files modified**: `frontend/src/pages/Docs.tsx`
-- **Build status**: PASS (0 errors, `tsc -b && vite build`)
+- **Files modified**: `paper/main.tex` (formatting, citations, hypersetup, equation alignment, table resizing)
+- **Build status**: PASS (0 fatal errors, 0 undefined citations, 0 overfull warnings)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: PASS (Frontend build succeeds cleanly)
-- **Lint status**: 0 errors
-- **Tests added/modified**: Verified via interactive component build and TypeScript check
+- **Build/test result**: PDF compiled cleanly (`paper/main.pdf` generated, 6 pages, 265678 bytes). Go tests PASS.
+- **Lint status**: N/A
+- **Tests added/modified**: N/A
 
 ## Loaded Skills
 - None

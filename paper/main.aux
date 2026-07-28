@@ -1,0 +1,76 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{rfc6749,rfc6750}
+\citation{oidc_core}
+\citation{rfc7519}
+\citation{rfc8032}
+\citation{shor1994}
+\citation{mosca2018}
+\citation{fips204}
+\citation{kampanakis2022,paquin2023}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{rfc8392}
+\citation{fips204}
+\citation{ducas2018}
+\citation{rfc6749,rfc6750}
+\citation{oidc_core}
+\citation{rfc7519}
+\citation{rfc7515}
+\citation{rfc8392}
+\citation{rfc8949}
+\citation{bindel2017}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background \& Related Work}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}NIST PQC Standards \& FIPS 204 (ML-DSA-44)}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Cryptographic Parameters of Primitives in DilithiAuth}}{2}{table.1}\protected@file@percent }
+\newlabel{tab:crypto_primitives_comparison}{{1}{2}{Cryptographic Parameters of Primitives in DilithiAuth}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}OAuth 2.0, OIDC, and Token Transport Protocols}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Hybrid Cryptography in Identity Systems}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}DilithiAuth System Architecture}{3}{section.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces DilithiAuth High-Level Architecture: Hybrid Key Manager, Token Generation Pipeline, and Sidecar Signature Store (\texttt  {SigStore}).}}{3}{figure.1}\protected@file@percent }
+\newlabel{fig:arch_diagram}{{1}{3}{DilithiAuth High-Level Architecture: Hybrid Key Manager, Token Generation Pipeline, and Sidecar Signature Store (\texttt {SigStore})}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Hybrid Cryptographic Engine (\texttt  {pkg/signer})}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Token Generation Pipeline (\texttt  {pkg/oauth})}{3}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Thin JWT Strategy}{3}{subsubsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Jumbo JWT Strategy}{3}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}CBOR Web Token (CWT) Strategy}{3}{subsubsection.3.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Sidecar Signature Store (\texttt  {pkg/transport})}{4}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Token Strategy Trade-off Analysis}{4}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Mathematical Size Models}{4}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Empirical Benchmark Setup}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Empirical Micro-Benchmark Results}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Empirical Cryptographic Primitives Micro-Benchmarks}}{4}{table.2}\protected@file@percent }
+\newlabel{tab:crypto_benchmarks}{{2}{4}{Empirical Cryptographic Primitives Micro-Benchmarks}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Comparative Analysis}{4}{subsection.4.4}\protected@file@percent }
+\citation{fips204}
+\citation{grover1996}
+\citation{shor1994}
+\citation{sp800_208}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{rfc6749}{1}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Comprehensive Token Strategy Trade-Off Matrix}}{5}{table.3}\protected@file@percent }
+\newlabel{tab:token_strategy_comparison}{{3}{5}{Comprehensive Token Strategy Trade-Off Matrix}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Security Evaluation}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Post-Quantum Lattice Security}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Sidecar Integrity Verification via \texttt  {pqc\_ref}}{5}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Replay Protection and Lifecycle Controls}{5}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion \& Future Directions}{5}{section.6}\protected@file@percent }
+\bibcite{rfc6750}{2}
+\bibcite{oidc_core}{3}
+\bibcite{rfc7519}{4}
+\bibcite{rfc8032}{5}
+\bibcite{shor1994}{6}
+\bibcite{mosca2018}{7}
+\bibcite{fips204}{8}
+\bibcite{kampanakis2022}{9}
+\bibcite{paquin2023}{10}
+\bibcite{rfc8392}{11}
+\bibcite{ducas2018}{12}
+\bibcite{rfc7515}{13}
+\bibcite{rfc8949}{14}
+\bibcite{bindel2017}{15}
+\bibcite{grover1996}{16}
+\bibcite{sp800_208}{17}
+\gdef \@abspage@last{6}

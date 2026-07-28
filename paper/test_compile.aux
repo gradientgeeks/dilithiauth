@@ -1,0 +1,57 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{rfc6749}
+\citation{oidc_core}
+\citation{rfc7519}
+\citation{rfc8032}
+\citation{shor1994}
+\citation{mosca2018}
+\citation{fips204}
+\citation{kampanakis2022,paquin2023}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\citation{rfc8392}
+\citation{fips204}
+\citation{ducas2018}
+\citation{rfc6749}
+\citation{oidc_core}
+\citation{rfc7519}
+\citation{rfc7515}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background \& Related Work}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}NIST PQC Standards \& FIPS 204 (ML-DSA-44)}{3}{subsection.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Cryptographic Parameters of Primitives in DilithiAuth}}{3}{table.1}\protected@file@percent }
+\newlabel{tab:crypto_primitives_comparison}{{1}{3}{Cryptographic Parameters of Primitives in DilithiAuth}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}OAuth 2.0, OIDC, and Token Transport Protocols}{3}{subsection.2.2}\protected@file@percent }
+\citation{rfc8392}
+\citation{rfc8949}
+\citation{bindel2017}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Hybrid Cryptography in Identity Systems}{4}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}DilithiAuth System Architecture}{4}{section.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces DilithiAuth High-Level Architecture: Hybrid Key Manager, Token Generation Pipeline, and Sidecar Signature Store (\texttt  {SigStore}).}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:arch_diagram}{{1}{4}{DilithiAuth High-Level Architecture: Hybrid Key Manager, Token Generation Pipeline, and Sidecar Signature Store (\texttt {SigStore})}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Hybrid Cryptographic Engine (\texttt  {pkg/signer})}{5}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Token Generation Pipeline (\texttt  {pkg/oauth})}{5}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Thin JWT Strategy}{5}{subsubsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Jumbo JWT Strategy}{6}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}CBOR Web Token (CWT) Strategy}{6}{subsubsection.3.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Sidecar Signature Store (\texttt  {pkg/transport})}{6}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Token Strategy Trade-off Analysis}{7}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Mathematical Size Models}{7}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Empirical Benchmark Setup}{8}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Empirical Micro-Benchmark Results}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Empirical Cryptographic Primitives Micro-Benchmarks}}{8}{table.2}\protected@file@percent }
+\newlabel{tab:crypto_benchmarks}{{2}{8}{Empirical Cryptographic Primitives Micro-Benchmarks}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Comprehensive Token Strategy Trade-Off Matrix}}{8}{table.3}\protected@file@percent }
+\newlabel{tab:token_strategy_comparison}{{3}{8}{Comprehensive Token Strategy Trade-Off Matrix}{table.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Comparative Analysis}{8}{subsection.4.4}\protected@file@percent }
+\citation{fips204}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Security Evaluation}{9}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Post-Quantum Lattice Security}{9}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Sidecar Integrity Verification via \texttt  {pqc\_ref}}{9}{subsection.5.2}\protected@file@percent }
+\citation{sp800_208}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Replay Protection and Lifecycle Controls}{10}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion \& Future Directions}{10}{section.6}\protected@file@percent }
+\gdef \@abspage@last{10}

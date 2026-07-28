@@ -1,39 +1,39 @@
-# BRIEFING — 2026-07-27T17:18:54Z
+# BRIEFING — 2026-07-28T00:52:30Z
 
 ## Mission
-Investigate PKCE S256 code challenge generation across 5 languages, quickstart installation commands, and React UI implementation strategies for DilithiAuth SDK Documentation Page.
+Conduct a technical survey of `pkg/transport` and inspect existing test/benchmark suites in DilithiAuth.
 
 ## 🔒 My Identity
-- Archetype: Teamwork explorer
-- Roles: Read-only investigator / Analyst
+- Archetype: teamwork_preview_explorer
+- Roles: explorer
 - Working directory: /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3
-- Original parent: ec89e03f-2486-4ad3-b204-ca126741b2e7
-- Milestone: M1 (Explorer 3)
+- Original parent: 816dc588-4b69-4046-a9f6-f2d3dd90a087
+- Milestone: m1_3
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT modify source code files in frontend/ or pkg/ or sdk/
-- Produce structured analysis report in analysis.md and handoff report in handoff.md
-- Operation mode: CODE_ONLY network mode
+- Read-only investigation — do NOT implement
+- Operational mode: CODE_ONLY
 
 ## Current Parent
-- Conversation ID: ec89e03f-2486-4ad3-b204-ca126741b2e7
-- Updated: 2026-07-27T17:18:54Z
+- Conversation ID: 816dc588-4b69-4046-a9f6-f2d3dd90a087
+- Updated: 2026-07-28T00:52:30Z
 
 ## Investigation State
-- **Explored paths**: `sdk/js`, `sdk/go`, `sdk/python`, `sdk/java`, `sdk/dotnet`, `frontend/package.json`, `frontend/src/App.tsx`, `frontend/src/components/Navbar.tsx`, `frontend/src/components/QuantumTokenPlayground.tsx`
-- **Key findings**: 
-  - Verified exact PKCE S256 implementations for all 5 languages.
-  - Verified package installation commands: `npm install dilithiauth-js`, `pip install dilithiauth`, `go get github.com/Uttam-Mahata/DilithiAuth/sdk/go`, `mvn dependency:add -Dartifact=com.dilithiauth:dilithiauth-sdk:1.0.0`, `dotnet add package DilithiAuth.Client`.
-  - Detailed React implementation strategies for language switching tabs, copy-to-clipboard state, and API endpoint inspector UI.
-- **Unexplored areas**: None for M1 Explorer 3 scope.
+- **Explored paths**: `pkg/transport/`, `pkg/signer/`, `pkg/oauth/`, `pkg/verifier/`, `cmd/server/`, `tests/`
+- **Key findings**:
+  - `pkg/transport` enforces `MaxHeaderBytes = 16 KiB` (`MaxHeaderBytesForPQC`) via `NewPQCServer` and supports `SigStore` sidecar pattern with Memory, Redis, File, and Postgres backends.
+  - `pqc_ref` resolution is implemented in `pkg/verifier` via `v.SigStore.Get(claims.PQCRef)` with SHA-256 integrity assertion.
+  - Replay protection combines unique `jti`/`cti` token IDs, TTL expiration, optional `RevocationChecker`, single-use OAuth codes in `AuthzStore`, and PKCE S256 verification.
+  - No `Benchmark*` functions currently exist in the repository.
+  - Unit test coverage measured: `pkg/signer` 60.3%, `pkg/oauth` 66.7%, `pkg/transport` 50.5%, `pkg/verifier` 65.8%, `cmd/server` 6.0%.
+- **Unexplored areas**: None for M1.3 survey scope.
 
 ## Key Decisions Made
-- Authored analysis report to `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/analysis.md`
-- Delivered 5-component handoff report to `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/handoff.md`
+- Completed technical survey of `pkg/transport/` and test/benchmark suites.
+- Documented findings in `handoff.md`.
 
 ## Artifact Index
-- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/ORIGINAL_REQUEST.md — Original User Request
-- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/BRIEFING.md — Working briefing memory
-- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/progress.md — Progress heartbeat
-- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/analysis.md — Detailed investigation report
-- /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/handoff.md — 5-component handoff report
+- ORIGINAL_REQUEST.md — Original user prompt instructions
+- BRIEFING.md — Working briefing state
+- progress.md — Task progress heartbeat
+- handoff.md — 5-component handoff report

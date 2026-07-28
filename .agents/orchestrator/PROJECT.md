@@ -1,31 +1,31 @@
-# Project: DilithiAuth Interactive SDK Documentation Page
+# Project: DilithiAuth Post-Quantum Identity Architecture Research Paper
 
-## Overview
-DilithiAuth is a Post-Quantum Identity Provider (IdP) featuring hybrid Ed25519 + ML-DSA-44 signatures and custom token formats (Thin, Jumbo, CWT). This project adds an interactive, enterprise SaaS-styled SDK Documentation Page (`/docs`) to the React SPA (`frontend/src/pages/Docs.tsx`), complete with 5 language tabs (TypeScript, Go, Python, Java, .NET), quickstart guides, PKCE S256 code samples, copy-to-clipboard functionality, interactive API reference (Discovery, JWKS, /authorize, /token, /userinfo, Post-Quantum token formats), and navbar/router integration.
-
-## Code Layout
-- Frontend Root: `frontend/`
-- Page components: `frontend/src/pages/`
-  - `Docs.tsx` (New interactive SDK documentation page)
-- UI components: `frontend/src/components/`
-  - `Navbar.tsx` (Navigation bar with active state for `/docs`)
-  - `QuantumTokenPlayground.tsx` (Existing playground for reference/reuse patterns)
-- Main Routing: `frontend/src/App.tsx`
-- Styles: `frontend/src/index.css` & `App.css` (Tailwind CSS / modern CSS classes)
-- API Specs/Constants: `frontend/src/api.ts`
+## Architecture
+DilithiAuth is a Post-Quantum Identity Provider (IdP) implementing Ed25519 + ML-DSA-44 (FIPS 204) hybrid signatures to protect OAuth 2.0 / OIDC tokens against Harvest Now, Decrypt Later (HNDL) attacks.
+Key components of the codebase:
+- `pkg/signer`: Hybrid key pair generation (`HybridKeyPair`) and dual-signing primitives combining Ed25519 (64B signature) and ML-DSA-44 (2,420B signature).
+- `pkg/oauth`: OIDC Discovery, JWKS (including `mldsa44_pub`), Thin JWT issuance/validation, Jumbo JWT issuance/validation, and CBOR Web Tokens (CWT).
+- `pkg/transport`: Middleware enforcing `MaxHeaderBytes = 16 KiB` and sidecar reference store (`SigStore`) for Thin Token `pqc_ref` resolution.
+- `cmd/server`: HTTP server entry point exposing OIDC endpoints.
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Base Exploration & Specs | Investigate frontend setup, dependencies, existing component styling, and draft exact structure for Docs.tsx | None | DONE |
-| M2 | SDK Docs Component (`Docs.tsx`) & Multi-Lang Quickstart | Implement `Docs.tsx` with language switcher tabs (TS, Go, Python, Java, .NET), installation commands, PKCE S256 snippets, token exchange, userinfo retrieval, and copy buttons | M1 | DONE |
-| M3 | Interactive API & Identity Reference | Add API reference sections to `Docs.tsx` covering OpenID Discovery, JWKS, `/authorize`, `/token`, `/userinfo`, and PQ token formats (Thin, Jumbo, CWT) | M2 | DONE |
-| M4 | Navigation & Routing | Wire up `/docs` in `frontend/src/App.tsx` router and update `Navbar.tsx` to include "SDK & Docs" navigation link | M3 | DONE |
-| M5 | Quality, Build & Forensic Audit | Run `npm run build` in `frontend/`, ensure 0 TypeScript / Vite warnings/errors, and complete forensic audit | M4 | DONE |
+| 1 | Codebase Survey & Empirical Benchmarks | Conduct technical survey of `pkg/signer`, `pkg/oauth`, `pkg/transport`, `cmd/server` and execute Go benchmark tests to extract empirical performance data (token sizes, signing/verification latency, header overhead). | none | DONE |
+| 2 | IEEEtran LaTeX Paper & Bibliography Drafting | Create `paper/main.tex` (7 sections: Abstract, Intro, Background, Architecture, Trade-offs, Security, Conclusion) and `paper/references.bib` with citations. | M1 | DONE |
+| 3 | PDF Compilation, Verification & Audit | Compile `paper/main.pdf` using `pdflatex` & `bibtex`, run Reviewers, Challengers, and Forensic Auditor for verification. | M2 | DONE |
 
-## Interface Contracts
-- `/docs` route renders `Docs.tsx`
-- Navbar includes a link to `/docs` with active state highlighting
-- Language tabs: TypeScript (`ts`), Go (`go`), Python (`python`), Java (`java`), .NET (`dotnet`)
-- Code snippets copyable with toast/copied feedback notification
-- Clean TypeScript types, standard React state management
+## Interface Contracts & Artifact Standards
+- IEEEtran Document Class: `\documentclass[conference]{IEEEtran}` in `paper/main.tex`.
+- Bibliography: `paper/references.bib` using standard BibTeX entries (FIPS 204, RFC 8392, RFC 7519, RFC 6749, NIST PQC standards, etc.).
+- PDF output: `paper/main.pdf` compiled cleanly with `pdflatex -interaction=nonstopmode main.tex` and `bibtex main`.
+- Technical coverage: Thin Tokens (`pqc_ref`), Jumbo JWTs (`pqc_sig`), CWT (CBOR), Hybrid `HybridKeyPair`, `MaxHeaderBytes = 16 KiB`, HNDL threat model.
+
+## Code Layout
+- `paper/main.tex`
+- `paper/references.bib`
+- `paper/main.pdf`
+- `pkg/signer/`
+- `pkg/oauth/`
+- `pkg/transport/`
+- `cmd/server/`

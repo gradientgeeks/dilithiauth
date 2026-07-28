@@ -85,11 +85,23 @@ type userSessionClaims struct {
 	jwt.RegisteredClaims
 	Subject   string `json:"sub"`
 	Username  string `json:"username,omitempty"`
+	Email     string `json:"email,omitempty"`
 	PQCRef    string `json:"pqc_ref,omitempty"`
 	CSRFToken string `json:"csrf,omitempty"`
 }
 
-// HandleLogin initiates the PKCE OAuth 2.0 Authorization Code flow.
+// socialProviders is the set of providers HandleLogin will forward to via
+// DilithiAuth's own /auth/social/{provider} endpoint instead of /authorize.
+var socialProviders = map[string]bool{"google": true, "github": true}
+
+// HandleLogin initiates the PKCE OAuth 2.0 Authorization Code flow. If a
+// recognized `provider` query param is present (e.g. "google", "github"),
+// the browser is sent to DilithiAuth's own /auth/social/{provider} endpoint
+// instead of /authorize, so the user authenticates with that provider first;
+// DilithiAuth still issues the authorization code redeemed below, using the
+// same state/PKCE values generated here. Without this, a frontend linking
+// straight to /auth/social/{provider} bypasses the PKCE cookie and state
+// this handler sets up, and HandleCallback always rejects it.
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Generate random PKCE verifier (32 random bytes => 43 chars base64url)
 	verifierBytes := make([]byte, 32)
@@ -129,8 +141,13 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Redirect browser to DilithiAuth IdP /authorize endpoint
-	authURL, err := url.Parse(s.config.IssuerURL + "/authorize")
+	// Redirect browser to DilithiAuth IdP /authorize endpoint, or to a social
+	// provider via DilithiAuth's own /auth/social/{provider} if requested.
+	authPath := "/authorize"
+	if provider := r.URL.Query().Get("provider"); socialProviders[provider] {
+		authPath = "/auth/social/" + provider
+	}
+	authURL, err := url.Parse(s.config.IssuerURL + authPath)
 	if err != nil {
 		http.Error(w, "bff: invalid authorize URL", http.StatusInternalServerError)
 		return
@@ -254,6 +271,28 @@ func (s *Server) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fetch the real name/email from /userinfo (scope requested above is
+	// "openid profile email", so both should be present). Best-effort: the
+	// session still works with just the bare subject if this fails, it just
+	// won't have a human-readable display name/email.
+	var displayName, email string
+	if req, reqErr := http.NewRequest(http.MethodGet, s.config.IssuerURL+"/userinfo", nil); reqErr == nil {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		if userinfoResp, uiErr := http.DefaultClient.Do(req); uiErr == nil {
+			defer userinfoResp.Body.Close()
+			if userinfoResp.StatusCode == http.StatusOK {
+				var userinfo struct {
+					Name  string `json:"name"`
+					Email string `json:"email"`
+				}
+				if json.NewDecoder(userinfoResp.Body).Decode(&userinfo) == nil {
+					displayName = userinfo.Name
+					email = userinfo.Email
+				}
+			}
+		}
+	}
+
 	// Create signed session cookie for the BFF
 	csrfBytes := make([]byte, 16)
 	if _, err := rand.Read(csrfBytes); err != nil {
@@ -269,6 +308,8 @@ func (s *Server) HandleCallback(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.config.TokenTTL)),
 		},
 		Subject:   subject,
+		Username:  displayName,
+		Email:     email,
 		PQCRef:    pqcRef,
 		CSRFToken: base64.RawURLEncoding.EncodeToString(csrfBytes),
 	}
@@ -321,12 +362,21 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	email := claims.Email
+	if email == "" {
+		email = claims.Subject
+	}
+	name := claims.Username
+	if name == "" {
+		name = email
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"authenticated": true,
 		"id":            claims.Subject,
-		"email":         claims.Subject,
-		"name":          claims.Subject,
+		"email":         email,
+		"name":          name,
 		"subject":       claims.Subject,
 		"pqc_ref":       claims.PQCRef,
 		"expires_at":    claims.ExpiresAt.Time,

@@ -1,0 +1,83 @@
+\begin{thebibliography}{10}
+
+\bibitem{rfc6749}
+D.~Hardt, ``The oauth 2.0 authorization framework,'' RFC RFC 6749, RFC Editor,
+  Oct. 2012.
+
+\bibitem{rfc6750}
+M.~Jones and D.~Hardt, ``The oauth 2.0 authorization framework: Bearer token
+  usage,'' RFC RFC 6750, RFC Editor, Oct. 2012.
+
+\bibitem{oidc_core}
+N.~Sakimura, J.~Bradley, M.~Jones, B.~de~Medeiros, and C.~Mortimore, ``Openid
+  connect core 1.0 incorporating errata set 1.'' OpenID Foundation Standard,
+  Nov. 2014.
+
+\bibitem{rfc7519}
+M.~Jones, J.~Bradley, and N.~Sakimura, ``Json web token (jwt),'' RFC RFC 7519,
+  RFC Editor, May 2015.
+
+\bibitem{rfc8032}
+S.~Josefsson and I.~Liusvaara, ``Edwards-curve digital signature algorithm
+  (eddsa),'' RFC RFC 8032, RFC Editor, Jan. 2017.
+
+\bibitem{shor1994}
+P.~W. Shor, ``Algorithms for quantum computation: discrete logarithms and
+  factoring,'' in {\em Proceedings 35th Annual Symposium on Foundations of
+  Computer Science (FOCS)}, pp.~124--134, IEEE, 1994.
+
+\bibitem{mosca2018}
+M.~Mosca, ``Cybersecurity in an era of quantum computers: Will we be ready?,''
+  {\em IEEE Security \& Privacy}, vol.~16, no.~5, pp.~38--41, 2018.
+
+\bibitem{fips204}
+{National Institute of Standards and Technology}, ``Module-lattice-based
+  digital signature standard,'' Tech. Rep. FIPS PUB 204, U.S. Department of
+  Commerce, Aug. 2024.
+
+\bibitem{kampanakis2022}
+P.~Kampanakis, P.~Panburana, M.~Curcio, and C.~Standard, ``Post-quantum
+  cryptography in web protocols: Challenges and performance analysis,'' in {\em
+  Proceedings of the ACM Workshop on Secure and Trustworthy Cyber-Physical
+  Systems (STCPS)}, pp.~45--54, 2022.
+
+\bibitem{paquin2023}
+C.~Paquin, E.~Sancactepe, and T.~P. Dynamic, ``Evaluating post-quantum
+  signatures in identity and access management infrastructure,'' in {\em IEEE
+  Symposium on Security and Privacy Workshops (SPW)}, pp.~112--123, 2023.
+
+\bibitem{rfc8392}
+M.~Jones, E.~Wahlstroem, A.~Erdtman, and H.~Tschofenig, ``Cbor web token
+  (cwt),'' RFC RFC 8392, RFC Editor, May 2018.
+
+\bibitem{ducas2018}
+L.~Ducas, E.~Kiltz, T.~Lepoint, V.~Lyubashevsky, P.~Schwabe, G.~Seiler, and
+  D.~Stehl{\'e}, ``Crystals-dilithium: Digital signatures from module
+  lattices,'' {\em IACR Transactions on Cryptographic Hardware and Embedded
+  Systems}, vol.~2018, no.~1, pp.~238--268, 2018.
+
+\bibitem{rfc7515}
+M.~Jones, J.~Bradley, and N.~Sakimura, ``Json web signature (jws),'' RFC RFC
+  7515, RFC Editor, May 2015.
+
+\bibitem{rfc8949}
+C.~Bormann and P.~Hoffman, ``Concise binary object representation (cbor),'' RFC
+  RFC 8949, RFC Editor, Dec. 2020.
+
+\bibitem{bindel2017}
+N.~Bindel, U.~Herath, E.~Koppula, and D.~Stebila, ``Transitioning to
+  post-quantum cryptography: A survey on hybrid schemes,'' {\em Quantum Science
+  and Technology}, vol.~2, no.~3, p.~034008, 2017.
+
+\bibitem{grover1996}
+L.~K. Grover, ``A fast quantum mechanical algorithm for database search,'' in
+  {\em Proceedings 28th Annual ACM Symposium on Theory of Computing (STOC)},
+  pp.~212--219, 1996.
+
+\bibitem{sp800_208}
+D.~Cooper, D.~Apon, D.~Connolly, S.~Regenscheid, and R.~Perlner,
+  ``Recommendation for stateful hash-based signature schemes,'' Tech. Rep. NIST
+  Special Publication 800-208, National Institute of Standards and Technology,
+  Oct. 2020.
+
+\end{thebibliography}

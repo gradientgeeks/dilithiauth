@@ -1,47 +1,25 @@
-# Step-by-Step Orchestration Plan: DilithiAuth SDK Documentation Page
+# Concrete Execution Plan — DilithiAuth Research Paper
 
-## Objective
-Deliver an interactive, enterprise-grade SDK Documentation Page in the DilithiAuth React SPA (`frontend/src/pages/Docs.tsx`) satisfying requirements R1 through R4, verified with 0 build errors.
+## Milestone 1: Technical Survey & Empirical Benchmarking
+- [ ] Step 1.1: Dispatch 3 Explorer subagents to analyze Go codebase (`pkg/signer`, `pkg/oauth`, `pkg/transport`, `cmd/server`) and examine benchmark suites/tests.
+- [ ] Step 1.2: Dispatch Worker subagent to execute Go benchmarks, collect precise token payload sizes (Thin JWT, Jumbo JWT, CWT), timing data (signing/verification), and storage/header overheads.
+- [ ] Step 1.3: Aggregate benchmark results and architectural findings into a structured technical survey report.
 
-## Execution Steps
+## Milestone 2: IEEEtran LaTeX Paper & BibTeX Bibliography Drafting
+- [ ] Step 2.1: Dispatch Worker subagent to create `paper/` directory and draft `paper/references.bib` with comprehensive BibTeX citations.
+- [ ] Step 2.2: Dispatch Worker subagent to draft `paper/main.tex` formatted for `\documentclass[conference]{IEEEtran}` covering all 7 core sections:
+  1. Abstract
+  2. Introduction
+  3. Background & Related Work
+  4. DilithiAuth System Architecture
+  5. Token Strategy Trade-off Analysis (with empirical benchmark tables)
+  6. Security Evaluation
+  7. Conclusion & Future Directions
+- [ ] Step 2.3: Verify paper completeness and formatting.
 
-### Step 1: Base Exploration & System Architecture (M1)
-- Dispatch `teamwork_preview_explorer` to:
-  - Inspect `frontend/package.json` for UI icon libraries (`lucide-react`), syntax highlighters, or utility libraries.
-  - Read `frontend/src/App.tsx`, `Navbar.tsx`, `Landing.tsx`, `QuantumTokenPlayground.tsx` to understand navigation, layout, dark/light theme, and styling patterns.
-  - Review existing backend/SDK details in `sdk/` or `pkg/` or API endpoints to ensure code snippets are 100% accurate for DilithiAuth.
-- Output: `M1_exploration_report.md` with complete implementation specifications.
-
-### Step 2: Implementation - SDK Docs Component & Multi-Language Quickstarts (M2 & M3)
-- Dispatch `teamwork_preview_worker` to:
-  - Create `frontend/src/pages/Docs.tsx` featuring:
-    - Enterprise SaaS header & documentation layout with side/top navigation.
-    - Multi-language tabs: TypeScript, Go, Python, Java, .NET.
-    - Quickstart installation commands (`npm install`, `pip install`, `go get`, `mvn`, `dotnet add package`).
-    - Authentic PKCE S256 challenge generation code examples per language.
-    - OAuth2 / OIDC token exchange & userinfo retrieval code examples per language.
-    - Copy-to-clipboard functionality with visual feedback ("Copied!").
-    - Interactive API & Post-Quantum Identity Reference section detailing:
-      - `GET /.well-known/openid-configuration`
-      - `GET /.well-known/jwks.json`
-      - `GET /authorize`
-      - `POST /token`
-      - `GET /userinfo`
-      - Post-Quantum token strategy breakdowns (Thin Tokens with `pqc_ref`, Jumbo Tokens with embedded ML-DSA-44 signatures ~4KB, CWT binary CBOR tokens).
-- Output: `Docs.tsx` created with complete UI and logic.
-
-### Step 3: Navigation & Router Integration (M4)
-- Dispatch `teamwork_preview_worker` to:
-  - Update `frontend/src/App.tsx` to add `<Route path="/docs" element={<Docs />} />`.
-  - Update `frontend/src/components/Navbar.tsx` to include the "SDK & Docs" nav item with active link highlighting.
-- Output: App routing and navbar updated.
-
-### Step 4: Verification, Review & Audit (M5)
-- Dispatch `teamwork_preview_reviewer` (or 2 independent reviewers) to verify implementation completeness, UI UX, copy button mechanics, and code snippet accuracy.
-- Dispatch `teamwork_preview_worker` to run `npm run build` in `frontend/` and report build output.
-- Dispatch `teamwork_preview_auditor` to conduct forensic integrity verification.
-- Verify 0 TypeScript / Vite build errors.
-
-### Step 5: Final Aggregation & Victory Report
-- Synthesize all review and audit results.
-- Report completion to parent / Sentinel.
+## Milestone 3: PDF Compilation, Verification & Forensic Audit
+- [ ] Step 3.1: Dispatch Worker subagent to run `pdflatex -interaction=nonstopmode main.tex` and `bibtex main` inside `paper/` to build `paper/main.pdf`.
+- [ ] Step 3.2: Dispatch 2 Reviewer subagents to evaluate academic rigor, technical accuracy, LaTeX syntax, and complete section coverage.
+- [ ] Step 3.3: Dispatch 2 Challenger subagents to verify clean PDF compilation, check for compilation warnings/errors, and validate empirical numbers in text.
+- [ ] Step 3.4: Dispatch Forensic Auditor (`teamwork_preview_auditor`) to verify zero integrity violations.
+- [ ] Step 3.5: Synthesize results and report completion to Sentinel.
