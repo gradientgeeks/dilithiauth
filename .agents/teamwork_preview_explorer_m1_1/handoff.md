@@ -1,101 +1,118 @@
-# Handoff Report: Cryptographic Survey of `pkg/signer` in DilithiAuth
+# Handoff Report — Milestone 1 Exploration
+
+**Agent Role**: Explorer Subagent (`teamwork_preview_explorer_m1_1`)  
+**Target Subsystem**: Frontend Codebase (`/home/uttam/projects/DilithiAuth/frontend`)  
+**Date**: 2026-07-28  
+
+---
 
 ## 1. Observation
 
-Direct code examination of `pkg/signer/` and its dependent packages (`pkg/oauth`, `pkg/verifier`, `pkg/transport`) revealed the following exact implementation details and byte specifications:
+Direct observations from examining the frontend codebase at `/home/uttam/projects/DilithiAuth/frontend`:
 
-### File Locations and Code Anchors
-- **`pkg/signer/signer.go`**:
-  - `HybridKeyPair` struct (`signer.go:20-31`): Combines `Kid` (string), `Ed25519Public` / `Ed25519Private` (`crypto/ed25519`), and `MLDSAPublic` / `MLDSAPrivate` (`github.com/cloudflare/circl/sign/mldsa/mldsa44`).
-  - `HybridSignature` struct (`signer.go:36-39`): Fields `Ed25519Sig` (`[]byte`, 64 bytes) and `MLDSASig` (`[]byte`, 2,420 bytes).
-  - `PublicKeyInfo` struct (`signer.go:43-47`): Contains `Kid`, `Ed25519Public` (32 bytes), and `MLDSAPublic` (1,312 bytes).
-  - `GenerateHybridKeyPair()` (`signer.go:52-79`): Generates 8 random bytes base64url-encoded as `Kid` (11 chars), Ed25519 keypair via `ed25519.GenerateKey(rand.Reader)`, and ML-DSA-44 keypair via `mldsa44.GenerateKey(rand.Reader)`.
-  - `Sign(msg []byte)` (`signer.go:84-101`): Produces both `ed25519.Sign(kp.Ed25519Private, msg)` (64 bytes) and `mldsa44.SignTo(kp.MLDSAPrivate, msg, nil, false, mlSig)` (2,420 bytes).
-  - Verification methods (`signer.go:107-127`): `VerifyEd25519` via `ed25519.Verify`, `VerifyMLDSA` via `mldsa44.Verify`, and `VerifyBoth` checking both signatures.
-- **`pkg/signer/keymanager.go`**:
-  - `KeyManager` struct (`keymanager.go:11-18`): Thread-safe `sync.RWMutex` managing key sets, active key pointer `activeKid`, 10-second refresh delay cache (`lastRefresh`), and `KeyStore` backend interface.
-  - Key Lifecycle: `NewKeyManagerWithStore` (`keymanager.go:21-45`), `Rotate()` (`keymanager.go:139-160`), `KeyByKid()` (`keymanager.go:105-123`), `AllPublicKeys()` (`keymanager.go:126-136`).
-- **`pkg/signer/keystore.go`**:
-  - `KeyStore` interface (`keystore.go:12-18`): `Save`, `Load`, `LoadAll`, `SetActiveKid`, `GetActiveKid`.
-  - `MarshalKeyPair` / `UnmarshalKeyPair` (`keystore.go:30-65`): JSON serialization using `mldsa44.PublicKey.UnmarshalBinary` and `mldsa44.PrivateKey.UnmarshalBinary`.
-- **`pkg/signer/file_keystore.go`**:
-  - `FileKeyStore` (`file_keystore.go:12-90`): Filesystem storage writing `<kid>.json` with mode `0600` and `active_kid.txt`.
-- **`pkg/signer/redis_keystore.go`**:
-  - `RedisKeyStore` (`redis_keystore.go:12-109`): Redis-backed storage using prefix keys (`dilithiauth:keys:<kid>`, `prefix+all`, `prefix+active`).
+- **Router Setup & Guards** (`src/App.tsx`):
+  - Line 27: `<AuthProvider>` wraps `<BrowserRouter basename={import.meta.env.VITE_ROUTER_BASENAME || ''}>`.
+  - Lines 13-17: `RequireAuth` guard checks `const { developer, loading } = useAuth()`. Renders `<div style={{ padding: '2rem' }}>Loading…</div>` while `loading` is true; renders `children` if `developer` is non-null; redirects to `/login` with `replace` if `developer` is null.
+  - Lines 19-23: `RequireGuest` guard checks `const { developer, loading } = useAuth()`. Renders `<div style={{ padding: '2rem' }}>Loading…</div>` while `loading` is true; redirects to `/apps` with `replace` if `developer` is non-null; renders `children` if `developer` is null.
+  - Lines 29-40: Declarative routes for `/` (`RequireGuest`), `/login` (`RequireGuest`), `/register` (`RequireGuest`), `/docs` (unwrapped), `/privacy` (unwrapped), `/terms` (unwrapped), `/apps` (`RequireAuth`), `/apps/new` (`RequireAuth`), `/apps/:id` (`RequireAuth`), and wildcard `*` (`<Navigate to="/" replace />`).
 
-### Cryptographic Parameters and Exact Byte Counts
+- **Navbar Usage** (`src/components/Navbar.tsx` & `src/pages/*.tsx`):
+  - `Navbar.tsx` (Lines 9-187): Exports default `Navbar` component. Consumes `const { developer, logout } = useAuth()`.
+  - Navbar does not wrap child routes; instead, `<Navbar />` is manually rendered at top of JSX in all 10 page files:
+    - `src/pages/Dashboard.tsx:39`
+    - `src/pages/NewApp.tsx:53, 122`
+    - `src/pages/AppDetail.tsx:69, 82, line top`
+    - `src/pages/Landing.tsx:16`
+    - `src/pages/Login.tsx:47`
+    - `src/pages/Register.tsx:105`
+    - `src/pages/Docs.tsx:17`
+    - `src/pages/DocsLoader.tsx`
+    - `src/pages/Privacy.tsx:8`
+    - `src/pages/Terms.tsx:8`
 
-| Primitive | Parameter / Field | Exact Byte Size | Bit Equivalent / Encoding |
-|---|---|---|---|
-| **Key ID** | `Kid` | 8 bytes raw | 11 chars (`base64.RawURLEncoding`) |
-| **Ed25519** | Public Key | **32 bytes** | 256 bits |
-| **Ed25519** | Private Key | **64 bytes** | 512 bits (seed + pubkey) |
-| **Ed25519** | Signature | **64 bytes** | 512 bits |
-| **ML-DSA-44** | Public Key | **1,312 bytes** | NIST FIPS 204 Category 1 |
-| **ML-DSA-44** | Private Key | **2,560 bytes** | NIST FIPS 204 Category 1 |
-| **ML-DSA-44** | Signature | **2,420 bytes** | NIST FIPS 204 Category 1 |
-| **PQC Reference**| `PQCRef` | 32 bytes SHA-256 | 43 chars (`base64.RawURLEncoding`) |
-| **Hybrid Signature** | `Ed25519Sig` + `MLDSASig` | **2,484 bytes** | Combined raw signature payload |
+- **AuthContext & State** (`src/AuthContext.tsx` & `src/api.ts`):
+  - `src/api.ts:10-15`: `Developer` interface:
+    ```typescript
+    export interface Developer {
+      id: string
+      email: string
+      name: string
+      csrf_token?: string
+    }
+    ```
+  - `src/AuthContext.tsx:6-12`: Context interface:
+    ```typescript
+    interface AuthCtx {
+      developer: Developer | null
+      loading: boolean
+      login: (email: string, password: string) => Promise<void>
+      register: (email: string, name: string, password: string) => Promise<void>
+      logout: () => Promise<void>
+    }
+    ```
+  - AuthContext exports `logout` (NOT `signOut`) and state object `developer` (NOT `user`).
+  - `auth.me()` runs on mount to populate `developer` and store `csrf_token`.
+  - `logout()` triggers concurrent `api.post('/logout')` and `axios.post(bffUrl, ...)` via `Promise.allSettled` and sets `developer` to `null`.
+
+- **Styling & Design Tokens** (`src/index.css` & `package.json`):
+  - `package.json:13,19`: `@tailwindcss/vite` `^4.3.3` and `tailwindcss` `^4.3.3`.
+  - `src/index.css:1-50`: Starts with `@import "tailwindcss";` followed by `@theme { ... }` block defining custom properties for backgrounds (`--color-bg: #090d16`, `--color-card`, `--color-card2`, `--color-hover`, `--color-input`), borders (`--color-border: #1e2a40`, `--color-border-mid`, `--color-focus`), primary/accent colors (`--color-primary: #3b82f6`, `--color-primary-h`, `--color-emerald`, `--color-rose`, `--color-amber`, `--color-cyan`, `--color-sky`, `--color-violet`), text (`--color-txt: #f1f5f9`, `--color-sub`, `--color-muted`), fonts (`--font-sans`, `--font-mono`), radii (`--radius-xs` through `--radius-lg`), and spacing (`--spacing-nav: 60px`).
+  - `src/index.css:83-157`: `@layer components` defines `.code-block`, `.secret-box`, `.mono-inline`, `.skeleton` shimmer, `.tab-active`, `.nav-active`, `.spin`.
+  - `npm run build` command output: `tsc -b && vite build` completed with 0 errors and built static bundle in `dist/`.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Hybrid Signature Construction**:
-   - DilithiAuth binds classical Ed25519 and PQC ML-DSA-44 under a single shared `Kid`.
-   - `GenerateHybridKeyPair()` generates Ed25519 (32B pub / 64B priv) and ML-DSA-44 (1,312B pub / 2,560B priv) simultaneously from `crypto/rand.Reader`.
-   - `Sign()` computes both signatures over identical payload bytes `msg`, returning a composite `HybridSignature` (64 bytes Ed25519 + 2,420 bytes ML-DSA-44 = 2,484 total signature bytes).
+1. **Routing Logic**:
+   - Observation: `App.tsx` wraps routes in `<AuthProvider>` and uses `<RequireAuth>` / `<RequireGuest>` route element wrappers.
+   - Inference: Unauthenticated users trying to access protected paths (`/apps`, `/apps/new`, `/apps/:id`) are redirected to `/login`. Authenticated users trying to access guest paths (`/`, `/login`, `/register`) are redirected to `/apps`. Public pages (`/docs`, `/privacy`, `/terms`) are accessible to all users.
 
-2. **NIST FIPS 204 Compliance and Security Guarantees**:
-   - ML-DSA-44 corresponds to Dilithium2, standardized under NIST FIPS 204.
-   - It relies on the computational hardness of Module Learning With Errors (M-LWE) and Module Short Integer Solution (M-SIS) in algebraic lattices (matrix dimensions $k=4, l=4$).
-   - Provides **NIST Security Category 1** protection (equivalent to AES-128 security against quantum search algorithms like Grover's and polynomial-time quantum period-finding like Shor's Algorithm).
+2. **Layout Structure Logic**:
+   - Observation: `<Navbar />` is explicitly imported and rendered inside each individual page file rather than within a shared outer `<Outlet />` or layout route.
+   - Inference: Any layout refactoring (e.g. creating a shared `AppLayout` or `RootLayout` component) will require replacing per-page `<Navbar />` calls with a unified layout wrapper in `App.tsx`.
 
-3. **Harvest Now, Decrypt Later (HNDL) Mitigation**:
-   - Adversaries currently harvest encrypted sessions and signed identity tokens for future decryption/forgery once Cryptographically Relevant Quantum Computers (CRQCs) emerge.
-   - Shor's algorithm will compromise Ed25519 (discrete logarithm problem on Curve25519), but cannot break ML-DSA-44 lattice problems.
-   - DilithiAuth's hybrid signatures ensure that even if Ed25519 is compromised by a future CRQC, the embedded or referenced ML-DSA-44 signature guarantees long-term non-repudiation and prevents historical token forgery.
+3. **Authentication State Logic**:
+   - Observation: `AuthContext.tsx` manages `developer: Developer | null` and provides `login`, `register`, and `logout`.
+   - Inference: The codebase consistently uses the identifier `developer` rather than `user`, and the function `logout` rather than `signOut`. Refactoring or integration code must use `developer` and `logout` to match the existing API contracts.
 
-4. **Token Bloat Architecture Tradeoffs**:
-   - Embedding a 2,420-byte ML-DSA-44 signature directly into every JWT header ("Jumbo Token") inflates header size to ~3.5–4 KB, exceeding standard web infrastructure header limits.
-   - DilithiAuth addresses this by supporting **Thin Tokens** in `pkg/oauth` (`IssueJWTThinWithScope`) and `pkg/verifier` (`VerifyJWT`). The Thin Token contains the 64-byte Ed25519 signature and a 43-character SHA-256 reference (`PQCRef`) pointing to the 2,420-byte ML-DSA-44 signature stored in a sidecar store (`transport.SigStore` / Redis).
+4. **Styling System Logic**:
+   - Observation: `src/index.css` uses Tailwind CSS v4 `@theme` block and `@import "tailwindcss";` without a `tailwind.config.js` file.
+   - Inference: Design tokens are centralized as CSS custom variables in `@theme` inside `src/index.css`. New components should leverage these CSS variables or standard Tailwind utility classes defined in `@theme`.
 
 ---
 
 ## 3. Caveats
 
-1. **External Network Scope**:
-   - This investigation operated under `CODE_ONLY` mode. No external HTTP requests were made.
-2. **Third-Party PQC Implementation**:
-   - ML-DSA-44 primitives are supplied by `github.com/cloudflare/circl v1.6.3`. Internal lattice operations (e.g. polynomial sampling, NTT transformations) are encapsulated within CIRCL.
-3. **Redis Dependency**:
-   - `RedisKeyStore` requires a running Redis instance for integration/production environments; in unit tests and local runs, `FileKeyStore` or in-memory stores are used.
+- **Redundant Build Artifacts**: `src/AuthContext.js` and `src/api.js` exist in `src/` alongside `AuthContext.tsx` and `api.ts`. These appear to be left over from an earlier JS compilation step. They are not imported by `App.tsx` (Vite resolves TS files), but they exist in the repository.
+- **Unused Boilerplate CSS**: `src/App.css` exists in `src/` but is not imported anywhere in the project.
+- **BFF URL Swapping**: `auth.logout()` and `auth.me()` in `src/api.ts` construct a BFF endpoint URL dynamically by string substitution (`.replace('/api/v1/developer', '') + '/api/v1/bff/...'`). This relies on `VITE_API_BASE_URL` having the expected format.
 
 ---
 
 ## 4. Conclusion
 
-`pkg/signer` in DilithiAuth provides a robust, production-ready hybrid signature framework combining Ed25519 (64-byte signatures, 32-byte public keys) and NIST FIPS 204 ML-DSA-44 (2,420-byte signatures, 1,312-byte public keys) under a single key identifier (`Kid`).
-
-The implementation cleanly mitigates the **Harvest Now, Decrypt Later (HNDL)** threat model by securing identity tokens against quantum cryptanalysis while maintaining backwards compatibility and mitigating token bloat via Thin Tokens and sidecar signature stores.
+The frontend codebase is well-structured, clean, and fully functional:
+- **Routing**: Implemented in `src/App.tsx` with React Router DOM 7 and robust route guards (`RequireAuth` and `RequireGuest`).
+- **Navbar**: Implemented in `src/components/Navbar.tsx` with responsive drawer; rendered individually in 10 page components.
+- **Auth System**: Managed via `src/AuthContext.tsx` and `src/api.ts`. State object is `developer` (`Developer | null`), auth status is derived from `developer !== null`, sign-out method is `logout()`, and CSRF protection is automatically attached via Axios request interceptors.
+- **Design & Styling**: Fully migrated to Tailwind CSS v4 in `src/index.css` via `@theme` tokens and component layer utilities. `npm run build` succeeds cleanly.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify these findings, execute the following commands in the workspace root `/home/uttam/projects/DilithiAuth`:
-
-1. **Run Unit Tests for `pkg/signer`**:
+1. **Verify Build**:
    ```bash
-   go test -v ./pkg/signer/...
+   cd /home/uttam/projects/DilithiAuth/frontend
+   npm run build
    ```
-   *Expected Output*: All 12 unit tests in `signer_test.go` and `keystore_test.go` pass without errors (`PASS`, `ok github.com/Uttam-Mahata/DilithiAuth/pkg/signer`).
+   *Expected result*: `tsc -b && vite build` completes with 0 errors and generates `dist/`.
 
-2. **Inspect Byte Constant Sizes via Go**:
-   Inspect `github.com/cloudflare/circl/sign/mldsa/mldsa44` constants or verify test outputs in `TestPublicKeyInfo` (`len(info.Ed25519Public) == 32`, `len(info.MLDSAPublic) == 1312`).
+2. **Verify Detailed Analysis**:
+   Inspect `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_1/analysis.md`.
 
-3. **Verify Full Project Integration**:
-   ```bash
-   go test ./...
-   ```
-   *Expected Output*: All package test suites (`pkg/signer`, `pkg/oauth`, `pkg/verifier`, `pkg/transport`, `pkg/bff`, `pkg/edgeproxy`, `pkg/tenant`, `pkg/ratelimit`, `tests`) pass cleanly.
+3. **Invalidation Conditions**:
+   - Changes to `src/App.tsx` changing route guards or layout structure.
+   - Changes to `src/AuthContext.tsx` renaming `developer` or `logout`.
+   - Changes to `src/index.css` modifying `@theme` CSS variable tokens.

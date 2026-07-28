@@ -1,150 +1,126 @@
-# Technical Survey Report: `pkg/oauth` and `cmd/server` in DilithiAuth
+# Handoff Report — Explorer Subagent (Milestone 1)
+
+**Working Directory:** `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2`  
+**Target Codebase:** `/home/uttam/projects/DilithiAuth/frontend/src`  
+
+---
 
 ## 1. Observation
 
-### 1.1 OIDC Discovery & JWKS Public Key Publication
-- **OIDC Discovery Endpoint:** Defined in `pkg/oauth/oauth.go` (lines 23–32, 79–94, 123–131) and mounted at `GET /.well-known/openid-configuration` in `cmd/server/main.go` (line 461).
-  - `DiscoveryDocument` struct:
-    ```go
-    type DiscoveryDocument struct {
-        Issuer                           string   `json:"issuer"`
-        AuthorizationEndpoint            string   `json:"authorization_endpoint"`
-        TokenEndpoint                    string   `json:"token_endpoint"`
-        JWKsURI                          string   `json:"jwks_uri"`
-        ResponseTypesSupported           []string `json:"response_types_supported"`
-        SubjectTypesSupported            []string `json:"subject_types_supported"`
-        IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
-        PQCHybridEnabled                 bool     `json:"pqc_hybrid_enabled"`
-    }
-    ```
-  - Configured response values:
-    - `id_token_signing_alg_values_supported`: `["RS256", "EdDSA", "MLDSA44"]`
-    - `pqc_hybrid_enabled`: `true`
-- **JWKS Endpoint & Custom Public Key Field:** Defined in `pkg/oauth/oauth.go` (lines 35–49, 98–119, 134–142) and mounted at `GET /.well-known/jwks.json` in `cmd/server/main.go` (line 462).
-  - `JWK` struct:
-    ```go
-    type JWK struct {
-        Kid        string `json:"kid"`
-        Kty        string `json:"kty"`
-        Crv        string `json:"crv,omitempty"`
-        X          string `json:"x,omitempty"`           // Ed25519 public key (base64url)
-        MLDSA44Pub string `json:"mldsa44_pub,omitempty"` // ML-DSA-44 public key (base64url)
-        Use        string `json:"use"`
-        Alg        string `json:"alg"`
-    }
-    ```
-  - Published attributes per key entry:
-    - `kid`: Key ID (8 random bytes base64url raw encoded, 11 chars).
-    - `kty`: `"OKP"` (Octet Key Pair, RFC 8037).
-    - `crv`: `"Ed25519"`.
-    - `x`: Base64url raw unpadded string of 32-byte Ed25519 public key (43 characters).
-    - `mldsa44_pub`: Base64url raw unpadded string of 1,312-byte ML-DSA-44 public key (NIST FIPS 204, 1,750 characters).
-    - `use`: `"sig"`.
-    - `alg`: `"EdDSA+MLDSA44"`.
-  - **Key Observation:** Both classical (`x`) and post-quantum (`mldsa44_pub`) public keys share the exact same `kid` in the JWKS document.
+Direct observations from source code inspection in `/home/uttam/projects/DilithiAuth/frontend/src`:
 
-### 1.2 Token Issuance Strategies
-DilithiAuth implements three token strategies in `pkg/oauth/oauth.go` and exposes them in `cmd/server/demo_routes.go` (`//go:build demo`) and `pkg/oauth/authz_handlers.go`:
+1. **`src/api.ts` (API bindings & types):**
+   - Lines 31-42: `OAuthApp` interface definition:
+     ```typescript
+     export interface OAuthApp {
+       ID: string
+       DeveloperID: string
+       Name: string
+       Description: string
+       HomepageURL: string
+       ClientID: string
+       RedirectURIs: string[]
+       IsPublic: boolean
+       CreatedAt: string
+       SecretRotatedAt: string | null
+     }
+     ```
+   - Lines 77-90: `apps` object definition:
+     ```typescript
+     export const apps = {
+       list: () => api.get<OAuthApp[]>('/apps'),
+       get: (id: string) => api.get<OAuthApp>(`/apps/${id}`),
+       create: (data: {
+         name: string
+         description: string
+         homepage_url: string
+         redirect_uris: string[]
+         is_public: boolean
+       }) => api.post<{ app: OAuthApp; client_secret?: string }>('/apps', data),
+       rotateSecret: (id: string) =>
+         api.post<{ app: OAuthApp; client_secret: string }>(`/apps/${id}/rotate-secret`),
+       delete: (id: string) => api.delete(`/apps/${id}`),
+     }
+     ```
+   - Note: No `update` method exists on `apps`.
 
-1. **Thin Tokens (`POST /token/thin` & `IssueJWTThinWithScope`):**
-   - **File & Lines:** `pkg/oauth/oauth.go` lines 180–240; `pkg/oauth/authz_handlers.go` lines 1116–1128; `cmd/server/demo_routes.go` lines 29–51.
-   - **Claims Struct (`HybridClaims`):** Standard claims (`iss`, `sub`, `exp`, `iat`, `jti`) + `tid` (tenant ID), `scope`, and `pqc_ref` (SHA-256 hash reference to ML-DSA-44 signature). `pqc_sig` is omitted (`omitempty`).
-   - **Header & Signature:** Signed using Ed25519 (`jwt.SigningMethodEdDSA`). Header: `{"alg":"EdDSA","kid":"...","typ":"JWT"}`.
-   - **Signature Reference (`pqc_ref`):** `sha256.Sum256(hybridSig.MLDSASig)` encoded as raw Base64url (43 chars).
-   - **Sidecar Storage:** Full 2,420-byte ML-DSA-44 signature (`hybridSig.MLDSASig`) is stored in `SigStore` (backed by Memory, File, PostgreSQL, or Redis) keyed by `pqc_ref`.
-   - **Default Strategy:** Standard OAuth 2.0 authorization code token exchange (`POST /token`) uses `IssueJWTThinWithScope`.
+2. **`src/pages/Dashboard.tsx` (App listing & dashboard logic):**
+   - Lines 9-13: State definitions: `appList` (`OAuthApp[]`), `loading` (`boolean`), `error` (`string`), `search` (`string`), `copiedId` (`string | null`).
+   - Lines 15-20: Fetching on mount: `apps.list().then(r => setAppList(r.data ?? [])).catch(...)`.
+   - Lines 22-27: Copy button handler: `copyClientId(id, e)` writes `id` to `navigator.clipboard`, sets `copiedId`, clears after 2000ms.
+   - Lines 29-32: Search filter:
+     ```typescript
+     const filteredApps = appList.filter(app =>
+       app.Name.toLowerCase().includes(search.toLowerCase()) ||
+       app.ClientID.toLowerCase().includes(search.toLowerCase())
+     )
+     ```
+   - Lines 66-89: Stats cards calculating `appList.length`, `IsPublic` count, confidential count, and ML-DSA-44 standard display.
 
-2. **Jumbo Tokens (`POST /token/full` & `IssueJWTFullWithScope`):**
-   - **File & Lines:** `pkg/oauth/oauth.go` lines 242–295; `cmd/server/demo_routes.go` lines 53–73.
-   - **Claims Struct (`HybridClaims`):** Standard claims + `tid`, `scope`, and `pqc_sig` (embedded raw ML-DSA-44 signature). `pqc_ref` is omitted (`omitempty`).
-   - **Embedded Signature (`pqc_sig`):** Base64url raw unpadded string of 2,420-byte ML-DSA-44 signature (~3,227 chars).
-   - **Stateless Nature:** Self-contained token; no `SigStore` sidecar lookup needed during verification.
-   - **Server Configuration:** Standard web servers fail on headers > 4–8 KB. DilithiAuth configures HTTP server `MaxHeaderBytes = 16 KiB` (`transport.NewPQCServer`, `cmd/server/main.go` line 549) and applies `transport.JumboHeaderMiddleware` (`cmd/server/main.go` line 368).
+3. **`src/pages/NewApp.tsx` (App creation form & secret handling):**
+   - Lines 16-24: Form state: `name`, `description`, `homepageURL`, `redirectURIs`, `isPublic`, `loading`, `error`, `created` (`CreatedResult | null`), `copied`.
+   - Lines 26-40: Form submission: parses `redirectURIs` by newline, validates non-empty array, calls `apps.create(...)`, sets `created` state.
+   - Lines 50-118: Success UI: displays `ClientID`, displays amber alert with `created.secret` if confidential app, provides `copySecret` button, and links to app details/dashboard.
 
-3. **CBOR Web Tokens / CWT (`POST /token/cwt` & `IssueCWTWithScope`):**
-   - **File & Lines:** `pkg/oauth/oauth.go` lines 298–393; `cmd/server/demo_routes.go` lines 75–96.
-   - **Claims Struct (`CWTClaims` with CBOR integer keys per RFC 8392):**
-     - `1`: `iss` (string)
-     - `2`: `sub` (string)
-     - `3`: `aud` (string, omitempty)
-     - `4`: `exp` (int64 UNIX timestamp)
-     - `6`: `iat` (int64 UNIX timestamp)
-     - `7`: `cti` (string, token ID / jti)
-     - `8`: `pqc_ref` (string, SHA-256 reference hash, omitempty)
-     - `9`: `tid` (string, tenant ID, omitempty)
-     - `10`: `scope` (string, granted scopes, omitempty)
-   - **Envelope Format:** Binary CBOR two-element array: `[tokenBytes (CBOR-encoded claims), ed25519_sig (64 raw bytes)]`.
-   - **Sidecar Storage:** ML-DSA-44 signature stored in `SigStore` keyed by `cti` (token ID / JWT ID).
-
-### 1.3 Empirical Size Measurements
-Running unit test `TestCWTSmallerThanJWT` in `pkg/oauth/oauth_test.go`:
-- **Thin JWT size:** `401 bytes` (Base64url text format)
-- **CWT size:** `197 bytes` (Binary CBOR format)
-- **Empirical Reduction:** CWT is **50.87% smaller** than Thin JWT for identical claim payload data.
-- **Jumbo JWT size:** ~`3,850 bytes` to `4,100 bytes` (due to ~3,227 char `pqc_sig` Base64url payload string).
+4. **`src/pages/AppDetail.tsx` (App details, secret rotation, deletion):**
+   - Lines 36-39: Fetching app details: `useEffect` calls `apps.get(id)`.
+   - Lines 41-51: Secret rotation: `handleRotate` calls `apps.rotateSecret(id)`, updates `app` state, and sets `rotatedSecret` for one-time display.
+   - Lines 53-58: App deletion: `handleDelete` calls `apps.delete(id)` and navigates to `/apps`.
+   - Lines 300-323: Configuration card: displays `HomepageURL`, `CreatedAt`, and `RedirectURIs` in read-only format. There is no edit form or update state handler in `AppDetail.tsx`.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Dual-Algorithm Identity Design:**
-   - Observations of `JWK` struct and `DiscoveryDocument()` show that DilithiAuth couples classical Ed25519 (fast, legacy compatibility) with ML-DSA-44 (NIST FIPS 204 quantum resistance).
-   - Publishing both `x` and `mldsa44_pub` under a single `kid` ensures verifiers can validate either classical Ed25519 signatures (low-overhead edge verification) or full ML-DSA-44 signatures (quantum audit) using a unified key lookup.
-
-2. **Mitigating "Token Bloat" via Token Triad:**
-   - ML-DSA-44 signatures are 2,420 bytes long. Base64url encoding adds 33% overhead (~3,227 chars). Embedding this in standard JWTs creates Jumbo tokens (~4 KB), exceeding default proxy and web server HTTP header buffers (typically 4–8 KB).
-   - DilithiAuth solves this through two architectural paths:
-     - **Path A (Sidecar Optimization):** Thin JWTs replace the 3.2 KB `pqc_sig` with a 43-character `pqc_ref` SHA-256 hash. The signature is offloaded to `SigStore`. This reduces HTTP header size from ~4 KB down to ~400 bytes.
-     - **Path B (Binary Compression):** CWT replaces JSON string keys (e.g. `"iss"`, `"sub"`, `"exp"`) with integer keys (`1`, `2`, `4`), replaces Base64url text encoding with raw binary CBOR bytes, and replaces Base64url signature strings with 64 raw bytes in a CBOR array. This drops token size to 197 bytes (~50.8% reduction vs Thin JWT).
-     - **Path C (Stateless Zero-Trust):** Jumbo Tokens embed the full signature for zero-trust environments where sidecar stores cannot be reached, supported by setting server `MaxHeaderBytes` to 16 KiB.
+1. **Observation 1** establishes the exact API surface in `src/api.ts`. The exported interface is `OAuthApp`, and `apps` exposes `list`, `get`, `create`, `rotateSecret`, and `delete`.
+2. **Observation 2** links `Dashboard.tsx` state to `apps.list()`. The component maintains reactive `search` filtering over `appList` and handles asynchronous clipboard copy feedback per row.
+3. **Observation 3** links `NewApp.tsx` state to `apps.create()`. It handles array transformation of multiline string inputs for `redirectURIs` and manages ephemeral display of the returned `client_secret`.
+4. **Observation 4** links `AppDetail.tsx` to `apps.get()`, `apps.rotateSecret()`, and `apps.delete()`. The investigation reveals that while viewing, secret rotation, and deletion are fully implemented, editing application settings (updating name, description, homepage, or redirect URIs) is not currently implemented in either `AppDetail.tsx` or `api.ts`.
 
 ---
 
 ## 3. Caveats
 
-- **Demo Route Compilation:** The endpoints `POST /token/thin`, `POST /token/full`, and `POST /token/cwt` in `cmd/server/demo_routes.go` are guarded by `//go:build demo`. Production builds use `demo_routes_stub.go` (no-op) and issue Thin JWTs via standard OAuth 2.0 `POST /token` authorization code exchange.
-- **CWT Transport:** In the demo endpoint `POST /token/cwt`, CWT tokens are returned directly in the HTTP body as raw binary (`Content-Type: application/cbor`). When passed in HTTP `Authorization` headers in HTTP/1.1 environments, binary CWT tokens require binary-safe transport or custom headers (`X-Token-Id`).
-- **SigStore TTL:** Signatures in `SigStore` must match the token expiration (`tokenTTL` = 1 hour). If `SigStore` entries expire prematurely, thin token quantum verification fails.
+- **No Caveats:** All requested files (`src/api.ts`, `src/pages/Dashboard.tsx`, `src/pages/NewApp.tsx`, and `src/pages/AppDetail.tsx`) were inspected in their entirety without truncation or missing sections.
 
 ---
 
 ## 4. Conclusion
 
-DilithiAuth effectively solves the Post-Quantum Cryptography token bloat challenge through a hybrid signing architecture and three distinct token issuance strategies:
-1. **Thin Tokens:** The optimal default for web & microservices, keeping HTTP headers under 500 bytes while retaining a PQC audit trail in a sidecar (`SigStore`).
-2. **Jumbo Tokens:** Self-contained, stateless 4 KB tokens for offline or zero-trust validation, enabled by 16 KiB HTTP server header limits.
-3. **CBOR Web Tokens (CWT):** The most compact format (197 bytes, >50% smaller than Thin JWT), ideal for bandwidth-constrained networks and IoT.
+The existing page logic and API bindings for Milestone 1 are cleanly structured around TypeScript interfaces and Axios methods:
+- `OAuthApp` is the central model.
+- `Dashboard.tsx` handles app listing, stats, filtering, and Client ID copying.
+- `NewApp.tsx` handles form submission, array parsing for redirect URIs, and one-time secret display.
+- `AppDetail.tsx` handles app fetching, tabbed navigation (Overview, SDK Snippets, Danger Zone), secret rotation, and deletion. Editing application settings is currently omitted.
+
+Findings have been fully documented in `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2/analysis.md`.
 
 ---
 
 ## 5. Verification Method
 
-### 5.1 Command Line Verification
-Run the project Go tests to verify discovery document structure, JWKS key publication, token issuance, and empirical payload sizes:
+To independently verify these findings:
 
-```bash
-# Run all oauth, signer, and server tests
-go test -v ./pkg/oauth ./pkg/signer ./cmd/server
-```
+1. **Inspect API Module:**
+   ```bash
+   view_file AbsolutePath="/home/uttam/projects/DilithiAuth/frontend/src/api.ts"
+   ```
+   Verify interface `OAuthApp` (lines 31-42) and `apps` methods (lines 77-90).
 
-### 5.2 Specific Size Measurement Test
-Run the CWT vs JWT size comparison unit test:
+2. **Inspect Dashboard Logic:**
+   ```bash
+   view_file AbsolutePath="/home/uttam/projects/DilithiAuth/frontend/src/pages/Dashboard.tsx"
+   ```
+   Verify `apps.list()` call (line 16), search filter logic (lines 29-32), and copy handler (line 22).
 
-```bash
-go test -v ./pkg/oauth -run TestCWTSmallerThanJWT
-```
+3. **Inspect New App Form:**
+   ```bash
+   view_file AbsolutePath="/home/uttam/projects/DilithiAuth/frontend/src/pages/NewApp.tsx"
+   ```
+   Verify `apps.create()` call (line 33), redirect URI parsing (line 29), and `created.secret` box (lines 69-86).
 
-**Expected Test Output:**
-```
-=== RUN   TestCWTSmallerThanJWT
-    oauth_test.go:220: CWT size: 197 bytes, JWT (thin) size: 401 bytes
---- PASS: TestCWTSmallerThanJWT (0.00s)
-```
-
-### 5.3 File Inspection
-Inspect code locations to verify implementations:
-- Discovery & JWKS: `pkg/oauth/oauth.go` (lines 23–142)
-- Thin, Jumbo, CWT Issuance: `pkg/oauth/oauth.go` (lines 180–393)
-- Demo Endpoints: `cmd/server/demo_routes.go` (lines 17–96)
-- Standard Token Exchange: `pkg/oauth/authz_handlers.go` (lines 1003–1156)
-- 16 KiB Header Config: `cmd/server/main.go` (lines 368, 549)
+4. **Inspect App Detail Page:**
+   ```bash
+   view_file AbsolutePath="/home/uttam/projects/DilithiAuth/frontend/src/pages/AppDetail.tsx"
+   ```
+   Verify `apps.get()` (line 38), `apps.rotateSecret()` (line 46), `apps.delete()` (line 56), and absence of edit settings logic.

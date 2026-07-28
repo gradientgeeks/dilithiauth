@@ -1,25 +1,30 @@
-# Concrete Execution Plan — DilithiAuth Research Paper
+# Project Plan: DilithiAuth Developer Portal Redesign
 
-## Milestone 1: Technical Survey & Empirical Benchmarking
-- [ ] Step 1.1: Dispatch 3 Explorer subagents to analyze Go codebase (`pkg/signer`, `pkg/oauth`, `pkg/transport`, `cmd/server`) and examine benchmark suites/tests.
-- [ ] Step 1.2: Dispatch Worker subagent to execute Go benchmarks, collect precise token payload sizes (Thin JWT, Jumbo JWT, CWT), timing data (signing/verification), and storage/header overheads.
-- [ ] Step 1.3: Aggregate benchmark results and architectural findings into a structured technical survey report.
+## Objective
+Redesign the DilithiAuth developer portal authenticated screens (`/apps`, `/apps/new`, `/apps/:id`) into an Auth0 / Clerk-style dashboard with a persistent left sidebar navigation.
 
-## Milestone 2: IEEEtran LaTeX Paper & BibTeX Bibliography Drafting
-- [ ] Step 2.1: Dispatch Worker subagent to create `paper/` directory and draft `paper/references.bib` with comprehensive BibTeX citations.
-- [ ] Step 2.2: Dispatch Worker subagent to draft `paper/main.tex` formatted for `\documentclass[conference]{IEEEtran}` covering all 7 core sections:
-  1. Abstract
-  2. Introduction
-  3. Background & Related Work
-  4. DilithiAuth System Architecture
-  5. Token Strategy Trade-off Analysis (with empirical benchmark tables)
-  6. Security Evaluation
-  7. Conclusion & Future Directions
-- [ ] Step 2.3: Verify paper completeness and formatting.
+## Milestones & Strategy
 
-## Milestone 3: PDF Compilation, Verification & Forensic Audit
-- [ ] Step 3.1: Dispatch Worker subagent to run `pdflatex -interaction=nonstopmode main.tex` and `bibtex main` inside `paper/` to build `paper/main.pdf`.
-- [ ] Step 3.2: Dispatch 2 Reviewer subagents to evaluate academic rigor, technical accuracy, LaTeX syntax, and complete section coverage.
-- [ ] Step 3.3: Dispatch 2 Challenger subagents to verify clean PDF compilation, check for compilation warnings/errors, and validate empirical numbers in text.
-- [ ] Step 3.4: Dispatch Forensic Auditor (`teamwork_preview_auditor`) to verify zero integrity violations.
-- [ ] Step 3.5: Synthesize results and report completion to Sentinel.
+### Milestone 1: Exploration & Architectural Contract
+- **Goal**: Read and inspect existing frontend codebase in `frontend/src/`. Map router layout, AuthContext usage, design tokens in `index.css`, components (`Navbar.tsx`, `Dashboard.tsx`, `NewApp.tsx`, `AppDetail.tsx`), and API bindings (`apps` service).
+- **Deliverable**: `PROJECT.md` at root defining architecture, interfaces, code layout, and milestone list.
+
+### Milestone 2: R1 - Persistent Left Sidebar Shell (`SidebarLayout.tsx`)
+- **Goal**: Create a sticky sidebar shell component for authenticated routes.
+- **Features**: Logo at top, nav items (Applications `/apps`, Docs `/docs`, Settings disabled), user avatar/email + Sign Out at bottom.
+- **Responsiveness**: Sticky rail on desktop (≥1024px), icon rail on tablet (768–1023px), drawer/overlay on mobile (<768px). Styled with dark theme design tokens.
+
+### Milestone 3: R2 - Applications List Page (`Dashboard.tsx`)
+- **Goal**: Redesign `Dashboard.tsx` within sidebar shell.
+- **Features**: Auth0 console aesthetic, page header with title/subtitle and "Create Application" button, search/filter bar, app cards/table rows with masked Client ID, quick copy button, type badge, empty state illustration/CTA.
+
+### Milestone 4: R3 - Create Application Wizard Page (`NewApp.tsx`)
+- **Goal**: Redesign `NewApp.tsx` within sidebar shell.
+- **Features**: Multi-step/grouped wizard (Basic Info → Application Type → URIs), visual card selector for App Type (Public SPA vs Confidential Server-Side), post-creation success modal/screen with Client ID & Client Secret copy buttons and warning.
+
+### Milestone 5: R4 - App Detail Page (`AppDetail.tsx`)
+- **Goal**: Redesign `AppDetail.tsx` within sidebar shell.
+- **Features**: Sub-navigation/tabs for Settings, Code Snippets (OAuth code samples / configs), Danger Zone (Rotate Secret, Delete App). Clean form groups for settings.
+
+### Milestone 6: E2E Integration, Verification & Final Audit
+- **Goal**: Verify full build (`npm run build` with 0 TS and 0 Vite errors), responsiveness across viewports, no leftover Navbar references in authenticated pages, all API calls and auth actions functioning. Forensic Audit check.

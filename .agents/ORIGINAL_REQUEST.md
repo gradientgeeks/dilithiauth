@@ -1,43 +1,75 @@
 # Original User Request
 
-## 2026-07-27T19:20:29Z
+## Initial Request — 2026-07-28T14:41:18Z
 
-Research DilithiAuth's post-quantum identity architecture (Ed25519 + ML-DSA-44 hybrid signatures, Token bloat mitigation, Thin/Jumbo JWTs, and CWT), write a formal academic research paper in IEEEtran LaTeX format inside the `paper/` directory, and compile it to PDF using local `pdflatex`.
+Redesign the DilithiAuth developer portal authenticated screens (`/apps`, `/apps/new`, `/apps/:id`) into an **Auth0 / Clerk-style dashboard** with a persistent left sidebar navigation, replacing the current top-navbar-only layout with a proper developer console experience.
 
-Working directory: `/home/uttam/projects/DilithiAuth`
+Working directory: `/home/uttam/projects/DilithiAuth/frontend`
 Integrity mode: `development`
+
+## Context
+
+- React + Vite 8 + Tailwind v4 SPA.
+- Existing design tokens live in `src/index.css` (`@theme` block).
+- Existing pages: `src/pages/Dashboard.tsx`, `src/pages/NewApp.tsx`, `src/pages/AppDetail.tsx`, `src/components/Navbar.tsx`.
+- The top `Navbar.tsx` is used by public pages (Landing, Login, etc.) — keep it unchanged.
+- The authenticated dashboard layout should get its own sidebar shell, **not** re-use `Navbar.tsx`.
 
 ## Requirements
 
-### R1. Technical & Cryptographic Codebase Survey
-Survey DilithiAuth's Go codebase (`pkg/signer`, `pkg/oauth`, `pkg/transport`, `cmd/server`) and analyze:
-- **Harvest Now, Decrypt Later (HNDL) Threat Model**: Mitigating long-term cryptographic compromise of classical OIDC token signatures using NIST FIPS 204 ML-DSA-44 (Dilithium).
-- **Hybrid Signatures**: Dual signing strategy (`HybridKeyPair` combining classical Ed25519 64B signatures with post-quantum ML-DSA-44 2,420B signatures).
-- **Token Strategies & Optimization**:
-  1. *Thin Tokens*: Lightweight JWT containing Ed25519 signature + `pqc_ref` cryptographic hash referencing full ML-DSA signature in sidecar storage (Redis / memory).
-  2. *Jumbo Tokens*: Self-contained ~4KB JWT embedding full ~2.4KB ML-DSA-44 signature directly in `pqc_sig` claim.
-  3. *CBOR Web Tokens (CWT)*: Binary RFC 8392 format reducing token overhead by 20–30%.
-- **Large Header Middleware**: Transport middleware managing `MaxHeaderBytes = 16 KiB` and sidecar resolution.
+### R1. Persistent Left Sidebar Shell for Authenticated Pages
+Create a sidebar layout shell (component or layout wrapper) that appears on all authenticated pages (`/apps`, `/apps/new`, `/apps/:id`). The sidebar should include:
+- DilithiAuth logo / brand at the top.
+- Navigation items: **Applications** (links to `/apps`), **Docs** (links to `/docs`), **Settings** (placeholder, disabled or greyed).
+- Developer avatar / email and **Sign Out** button anchored at the bottom.
+- Collapses to an icon-only rail on tablet, becomes a drawer/overlay on mobile.
+- Styled dark theme consistent with existing `--color-*` CSS variables.
 
-### R2. Formal Academic Research Paper in IEEEtran LaTeX
-Create the research paper in directory `paper/` with the following structure:
-- `paper/main.tex`: Complete IEEEtran document (`\documentclass[conference]{IEEEtran}`) with sections:
-  1. *Abstract*: Problem statement, hybrid PQC approach, key empirical results.
-  2. *Introduction*: Quantum threats to identity providers, token bloat challenges in HTTP headers.
-  3. *Background & Related Work*: NIST PQC standardization (FIPS 204 ML-DSA-44), classical vs. PQC signature sizes, current identity protocols (OAuth 2.0 / OIDC).
-  4. *DilithiAuth System Architecture*: High-level design, `pkg/signer` hybrid primitives, `pkg/oauth` token issuance & validation pipeline, `pkg/transport` sidecar architecture.
-  5. *Token Strategy Trade-off Analysis*: Mathematical model & benchmark comparison (payload sizes, HTTP header overhead, storage latency vs. verification self-containment).
-  6. *Security Evaluation*: Post-quantum security analysis, sidecar integrity verification via `pqc_ref`, replay protection.
-  7. *Conclusion & Future Directions*: Summary of findings and recommendations for production deployment.
-- `paper/references.bib`: Complete BibTeX bibliography with citations for FIPS 204, RFC 8392, OAuth 2.0, NIST PQC standards, and related literature.
+### R2. Applications List Page (`/apps`) — Auth0 Console Aesthetic
+Redesign `Dashboard.tsx` to use the sidebar shell. The main content area should feel like Auth0's Applications list:
+- Page header with title, subtitle, and a prominent **"Create Application"** button.
+- App cards or table rows showing app name, client ID (masked), type badge (Public / Confidential), and quick-copy client ID button.
+- Empty state illustration/message with a CTA when no apps exist.
+- Search/filter bar above the list.
 
-### R3. Automated PDF Compilation
-- Ensure `paper/main.tex` compiles cleanly with `pdflatex -interaction=nonstopmode main.tex` and `bibtex main`.
-- Verify the generated `paper/main.pdf` is output in `paper/` without fatal LaTeX errors.
+### R3. Create Application Page (`/apps/new`) — Wizard-Style Form
+Redesign `NewApp.tsx` inside the sidebar shell. Make the creation flow feel like a proper Auth0-style wizard:
+- Clear step or section grouping: **Basic Info** → **Application Type** → **URIs**.
+- Application Type selector with visual cards (Public SPA vs Confidential Server-Side), not just a checkbox.
+- Post-creation success screen that prominently shows Client ID and Client Secret with copy buttons and a clear warning about the secret.
+
+### R4. App Detail Page (`/apps/:id`) — Settings Panel
+Redesign `AppDetail.tsx` inside the sidebar shell. Use a **left sub-nav** (or top tab bar) inside the detail page for: **Settings**, **Code Snippets**, **Danger Zone**. The settings tab should show all app fields in clean editable form groups.
 
 ## Acceptance Criteria
 
-### Verification & Deliverables
-- [ ] `paper/main.tex` and `paper/references.bib` are created with comprehensive technical content and valid LaTeX formatting.
-- [ ] Running `pdflatex -interaction=nonstopmode main.tex` inside `paper/` produces `paper/main.pdf`.
-- [ ] The paper covers all three token strategies (Thin, Jumbo, CWT), hybrid cryptographic primitives, and empirical benchmark data.
+### Build & Type Safety
+- [ ] `npm run build` in `frontend/` completes with 0 TypeScript errors and 0 Vite errors.
+- [ ] No `console.error` TypeScript errors in the browser (types must be correct).
+
+### Layout & Responsiveness
+- [ ] Sidebar is visible and sticky on desktop (≥1024px).
+- [ ] Sidebar collapses to icon rail on tablet (768px–1023px).
+- [ ] Sidebar becomes a slide-in drawer on mobile (<768px) triggered by a hamburger button.
+- [ ] No horizontal scroll on any viewport ≥320px.
+
+### Functionality Preserved
+- [ ] All existing API calls (`apps.list()`, `apps.create()`, `apps.get()`, `apps.rotateSecret()`, `apps.delete()`) continue to work correctly — no logic changes, only UI.
+- [ ] Sign Out button in the sidebar works (calls the existing `signOut` from `AuthContext`).
+- [ ] Copy-to-clipboard, form submission, secret rotation, and app deletion all work as before.
+
+### Visual Quality
+- [ ] The authenticated portal visually matches the quality bar of Auth0 or Clerk developer consoles — dark theme, clear hierarchy, premium spacing.
+- [ ] No leftover references to `Navbar` inside authenticated dashboard pages.
+
+## Follow-up — 2026-07-28T15:39:00Z
+
+The user has reviewed the prompt_draft.md and wants to continue through Milestone 5 (AppDetail.tsx tabbed redesign) to completion. The AppDetail.tsx implementation diff has already landed with SettingsTab, SnippetsTab, DangerZoneTab, SecretDisplayModal, and DeleteAppModal components. Please:
+
+1. Push Milestone 5 through its full review, challenger, and forensic audit gate.
+2. Ensure all sub-components (SettingsTab.tsx, SnippetsTab.tsx, DangerZoneTab.tsx, SecretDisplayModal.tsx, DeleteAppModal.tsx) exist and are correctly implemented.
+3. Verify the `apps.update()` call in handleSaveSettings — if that API method doesn't exist yet in `src/api.ts`, add it (PUT /api/v1/apps/:id).
+4. Run `npm run build` in `frontend/` and confirm 0 TypeScript + 0 Vite errors.
+5. Do a final git commit and push with a meaningful message summarizing the full Auth0-style portal redesign.
+
+Please proceed immediately.

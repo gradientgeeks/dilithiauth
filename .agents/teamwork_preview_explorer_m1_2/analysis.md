@@ -1,460 +1,167 @@
-# DilithiAuth Backend API & Post-Quantum Token Technical Analysis
+# Milestone 1: Component Logic & API Bindings Analysis
 
-## Executive Summary
-
-This report provides a comprehensive analysis of the DilithiAuth Post-Quantum Identity Provider (IdP) backend API specifications, Post-Quantum token mechanics, and authentic multi-language SDK code implementations (TypeScript, Go, Python, Java, and .NET).
-
-DilithiAuth integrates **NIST FIPS 204 (ML-DSA-44)** with **Ed25519** classical cryptography to provide hybrid post-quantum authorization code flows, OIDC discovery, and token verification while solving the ~2.4 KB signature token bloat problem through three distinct token delivery strategies.
-
----
-
-## 1. Backend API Specification
-
-DilithiAuth exposes standard OAuth 2.0 / OpenID Connect endpoints along with quantum-safe hybrid key discovery, token revocation, verification, and demo token issuance.
-
-### Endpoints Overview Table
-
-| Endpoint | Method | Auth Required | Content Type | Purpose / Description |
-|---|---|---|---|---|
-| `/.well-known/openid-configuration` | `GET` | None | `application/json` | OIDC Discovery Metadata (RFC 8414) |
-| `/.well-known/jwks.json` | `GET` | None | `application/json` | Public Key Set containing Ed25519 & ML-DSA-44 public keys |
-| `/authorize` | `GET` / `POST` | User Credentials | `text/html` / Redirect | PKCE Authorization Code flow login & consent entrypoint |
-| `/token` | `POST` | Client Credentials | `application/json` | Exchange auth code or refresh token for access token (Rate-limited: 2 req/sec, burst 20) |
-| `/userinfo` | `GET` | Bearer Token | `application/json` | OIDC protected endpoint returning user claims (`sub`, `name`, `email`) |
-| `/revoke` | `POST` | Client Credentials | `application/json` / 200 OK | RFC 7009 token revocation with hybrid signature verification |
-| `/verify/jwt` | `POST` | None | `application/json` | REST verification endpoint for lightweight clients |
-| `/token/thin` | `POST` | None (Demo tag) | `application/json` | Issue Thin JWT + store PQC signature in SigStore |
-| `/token/full` | `POST` | None (Demo tag) | `application/json` | Issue Jumbo JWT with embedded `pqc_sig` (~4KB) |
-| `/token/cwt` | `POST` | None (Demo tag) | `application/cbor` | Issue binary CBOR Web Token (RFC 8392) |
+**Date:** 2026-07-28  
+**Scope:** Frontend Application Logic & API Bindings (`frontend/src`)  
+**Target Files Analyzed:**
+- `src/api.ts` (API Client & Type Definitions)
+- `src/pages/Dashboard.tsx` (App Listing, Search, & Stats)
+- `src/pages/NewApp.tsx` (App Registration & One-time Secret Display)
+- `src/pages/AppDetail.tsx` (App Details, Credentials, SDK Snippets, Secret Rotation, Deletion)
 
 ---
 
-### Detailed Endpoint Specifications
+## 1. API Module & Data Models (`src/api.ts`)
 
-#### 1. `GET /.well-known/openid-configuration`
-- **Description**: Returns OpenID Connect discovery metadata.
-- **Response Example**:
-```json
-{
-  "issuer": "https://dilithiauthapis.gradientgeeks.tech",
-  "authorization_endpoint": "https://dilithiauthapis.gradientgeeks.tech/authorize",
-  "token_endpoint": "https://dilithiauthapis.gradientgeeks.tech/token",
-  "jwks_uri": "https://dilithiauthapis.gradientgeeks.tech/.well-known/jwks.json",
-  "response_types_supported": ["code"],
-  "subject_types_supported": ["public"],
-  "id_token_signing_alg_values_supported": ["RS256", "EdDSA", "MLDSA44"],
-  "pqc_hybrid_enabled": true
-}
-```
+### 1.1 HTTP Client Configuration
+- **Base URL:** Defaults to `import.meta.env.VITE_API_BASE_URL` or fallback `'https://dilithiauthapis.gradientgeeks.tech/api/v1/developer'`.
+- **Credentials:** Created using `axios.create({ baseURL: apiBaseURL, withCredentials: true })`.
+- **CSRF Defense:**
+  - In-memory CSRF token store (`let csrfToken: string | undefined`).
+  - Captured on `auth.login`, `auth.verifyEmail`, and `auth.me` responses.
+  - Request interceptor automatically attaches `X-CSRF-Token` header for state-changing HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`).
 
-#### 2. `GET /.well-known/jwks.json`
-- **Description**: Exposes public signing keys for dual-signature verification.
-- **Key Fields**:
-  - `kid`: Key identifier shared between Ed25519 and ML-DSA-44 sub-keys.
-  - `kty`: `"OKP"`
-  - `crv`: `"Ed25519"`
-  - `x`: Base64url-encoded Ed25519 public key (32 bytes raw).
-  - `mldsa44_pub`: Base64url-encoded ML-DSA-44 public key (1312 bytes raw).
-  - `alg`: `"EdDSA+MLDSA44"`
-- **Response Example**:
-```json
-{
-  "keys": [
-    {
-      "kid": "x9K3mP1Q",
-      "kty": "OKP",
-      "crv": "Ed25519",
-      "x": "u18d...",
-      "mldsa44_pub": "A9x2...",
-      "use": "sig",
-      "alg": "EdDSA+MLDSA44"
-    }
-  ]
-}
-```
-
-#### 3. `/authorize` (`GET` / `POST`)
-- **Query Parameters**:
-  - `client_id` (required): OAuth client ID.
-  - `redirect_uri` (required): Registered client callback URL.
-  - `response_type`: Must be `"code"`.
-  - `state` (recommended): Anti-CSRF token.
-  - `scope` (optional): Space-delimited requested scopes (e.g., `"openid profile email offline_access"`).
-  - `code_challenge` (required for public clients): Base64url-encoded S256 code challenge.
-  - `code_challenge_method`: Must be `"S256"`.
-- **Flow**:
-  1. `GET /authorize` renders login HTML form.
-  2. `POST /authorize` authenticates user credentials (using bcrypt / Argon2id).
-  3. If first-time consent is needed, issues a short-lived (5 min) HS256-signed consent ticket and renders consent page.
-  4. Upon approval, creates authorization code and redirects to `redirect_uri?code=...&state=...`.
-
-#### 4. `POST /token`
-- **Content-Type**: `application/x-www-form-urlencoded`
-- **Request Parameters** (`grant_type=authorization_code`):
-  - `grant_type`: `"authorization_code"`
-  - `client_id`: OAuth client ID.
-  - `code`: Authorization code issued by `/authorize`.
-  - `redirect_uri`: Matching redirect URI.
-  - `code_verifier`: PKCE code verifier (SHA256(code_verifier) == code_challenge).
-  - `client_secret` (optional for public PKCE clients, required for confidential clients via Basic Auth or body).
-- **Request Parameters** (`grant_type=refresh_token`):
-  - `grant_type`: `"refresh_token"`
-  - `refresh_token`: Rotated refresh token string.
-- **Response Example**:
-```json
-{
-  "access_token": "eyJhbGciOiJFZERTQSIsImtpZCI6Ing5SzNtUDFRIiwidHlwIjoiSldUIn0...",
-  "token_type": "Bearer",
-  "pqc_ref": "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
-  "refresh_token": "da_rt_9f8a..."
-}
-```
-
-#### 5. `GET /userinfo`
-- **Header**: `Authorization: Bearer <access_token>`
-- **Response**: Returns identity claims based on granted scopes:
-```json
-{
-  "sub": "alice",
-  "name": "alice",
-  "email": "alice@example.com"
-}
-```
-
----
-
-## 2. Post-Quantum Token Mechanics & Delivery Strategies
-
-Quantum-safe signatures like NIST ML-DSA-44 require ~2,420 bytes per signature (compared to 64 bytes for Ed25519). If included in standard HTTP Authorization headers, tokens can exceed typical server header limits (4 KB to 8 KB). DilithiAuth solves this using **3 token strategies**:
-
-```
-+-----------------------------------------------------------------------------------------+
-|                                    DilithiAuth Strategies                               |
-+------------------------------+------------------------------+---------------------------+
-| 1. Thin Token (Default)      | 2. Full / Jumbo Token        | 3. CBOR Web Token (CWT)   |
-| - Format: JWT (JSON)         | - Format: JWT (JSON)         | - Format: CBOR (Binary)   |
-| - Size: ~500 bytes           | - Size: ~3.5 - 4.0 KB        | - Size: ~200 - 300 bytes  |
-| - Ed25519 Sig: In Token      | - Ed25519 Sig: In Token      | - Ed25519 Sig: In Env     |
-| - ML-DSA-44: SigStore        | - ML-DSA-44: Embedded claim  | - ML-DSA-44: SigStore     |
-|   (referenced via `pqc_ref`) |   (`pqc_sig` claim)          |   (referenced via `cti`)  |
-| - Header Limit: Standard     | - Requires 16 KiB Header Limit| - Binary / IoT optimized  |
-+------------------------------+------------------------------+---------------------------+
-```
-
-### Strategy Breakdown
-
-1. **Thin Tokens (`pqc_ref` Sidecar Strategy - Recommended Default)**:
-   - **Header / Signature**: Signed classically via Ed25519 (`alg: "EdDSA"`).
-   - **Payload**: Standard JWT claims + `pqc_ref` claim containing `base64url(SHA-256(mldsa44_sig))`.
-   - **Sidecar Storage (`SigStore`)**: The full ~2,420 byte ML-DSA-44 signature is stored out-of-band in SigStore (In-Memory, File, PostgreSQL, or Redis) with a TTL matching token expiration (1 hour).
-   - **Verification**: Lightweight microservices verify Ed25519 instantly. High-security verifiers fetch the ML-DSA-44 signature from SigStore using `pqc_ref` or `jti` to execute full post-quantum verification.
-
-2. **Jumbo Tokens (Embedded ML-DSA-44 Signature)**:
-   - **Payload**: Contains `pqc_sig` claim holding the raw base64url-encoded ML-DSA-44 signature (~2,420 bytes).
-   - **Token Size**: ~3,500 – 4,000 bytes.
-   - **Self-Contained**: 100% self-contained token; no database or cache lookup needed for verification.
-   - **Infrastructure Impact**: Server and reverse proxies (Nginx, Envoy, Cloudflare) must be configured with `MaxHeaderBytes = 16 KiB` (`transport.MaxHeaderBytesForPQC`).
-
-3. **CBOR Web Tokens (CWT - RFC 8392)**:
-   - **Encoding**: Binary Concise Binary Object Representation (CBOR).
-   - **Integer Claim Mapping**:
-     - `1`: `iss` (Issuer)
-     - `2`: `sub` (Subject)
-     - `4`: `exp` (Expiration)
-     - `6`: `iat` (Issued At)
-     - `7`: `cti` (Token ID)
-     - `8`: `pqc_ref` (PQC Signature Hash Reference)
-     - `9`: `tid` (Tenant ID)
-     - `10`: `scope` (Granted Scopes)
-   - **Envelope Structure**: CBOR array `[claims_bytes, ed25519_sig]`.
-   - **Efficiency**: 20% to 30% smaller than JSON equivalent; ideal for low-power IoT and mobile network constraints.
-
----
-
-## 3. SDK Code Snippets Across 5 Languages
-
-Below are authentic, copy-paste ready code examples for initializing the client, generating PKCE pairs, conducting code exchange, and retrieving user info for each official DilithiAuth SDK.
-
----
-
-### A. TypeScript / JavaScript (`dilithiauth-js` / `@dilithiauth/sdk`)
-
-#### Package Installation
-```bash
-npm install dilithiauth-js
-```
-
-#### Initialization & PKCE Redirect
+### 1.2 Type Definitions
 ```typescript
-import { DilithiAuthClient, generateCodeVerifier, generateCodeChallenge } from 'dilithiauth-js';
+export interface OAuthApp {
+  ID: string
+  DeveloperID: string
+  Name: string
+  Description: string
+  HomepageURL: string
+  ClientID: string
+  RedirectURIs: string[]
+  IsPublic: boolean
+  CreatedAt: string
+  SecretRotatedAt: string | null
+}
 
-const client = new DilithiAuthClient({
-  domain: 'https://dilithiauthapis.gradientgeeks.tech',
-  clientId: 'my-web-app-client-id',
-  redirectUri: 'https://myapp.com/callback',
-  tokenStrategy: 'thin',
-  storageType: 'sessionStorage'
-});
-
-// Trigger PKCE Login Flow
-async function login() {
-  await client.loginWithRedirect({
-    scope: 'openid profile email offline_access'
-  });
+export interface Developer {
+  id: string
+  email: string
+  name: string
+  csrf_token?: string
 }
 ```
 
-#### Callback Handling & Token Exchange
-```typescript
-async function handleCallback() {
-  try {
-    const result = await client.handleRedirectCallback();
-    console.log('Access Token:', result.accessToken);
-    console.log('PQC Reference Hash:', result.pqcRef);
-    console.log('Authenticated User:', result.user);
-  } catch (error) {
-    console.error('Login callback error:', error);
-  }
-}
-```
+### 1.3 `apps` Object Method Signatures
+| Method | HTTP Verb & Path | Request Parameters / Payload | Response Type | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| `apps.list()` | `GET /apps` | None | `Promise<AxiosResponse<OAuthApp[]>>` | Retrieves all OAuth 2.0 apps owned by developer |
+| `apps.get(id)` | `GET /apps/${id}` | `id: string` (App ID) | `Promise<AxiosResponse<OAuthApp>>` | Retrieves single application details |
+| `apps.create(data)` | `POST /apps` | `{ name: string; description: string; homepage_url: string; redirect_uris: string[]; is_public: boolean }` | `Promise<AxiosResponse<{ app: OAuthApp; client_secret?: string }>>` | Returns `client_secret` only for confidential apps |
+| `apps.rotateSecret(id)` | `POST /apps/${id}/rotate-secret` | `id: string` (App ID) | `Promise<AxiosResponse<{ app: OAuthApp; client_secret: string }>>` | Rotates secret and returns new `client_secret` |
+| `apps.delete(id)` | `DELETE /apps/${id}` | `id: string` (App ID) | `Promise<AxiosResponse<any>>` | Revokes app credentials and deletes app |
+
+*Note: In `src/api.ts`, types are named `OAuthApp` (not `Application`), input payload for create is defined inline, and output payload for secret rotation is defined inline.*
 
 ---
 
-### B. Go (`github.com/DilithiAuth/dilithiauth-go` / `dilithiauth`)
+## 2. Dashboard Component Logic (`src/pages/Dashboard.tsx`)
 
-#### Package Installation
-```bash
-go get github.com/DilithiAuth/dilithiauth-go
-```
+### 2.1 State Structure
+- `appList`: `OAuthApp[]` (State holding list of applications)
+- `loading`: `boolean` (Loading state during initial API call)
+- `error`: `string` (Error message banner string)
+- `search`: `string` (Search query string for filtering)
+- `copiedId`: `string | null` (Tracks ClientID currently copied to clipboard for UI checkmark feedback)
 
-#### Client Initialization, PKCE & Code Exchange
-```go
-package main
+### 2.2 Execution & Data Fetching
+- `useEffect` runs once on component mount (lines 15-20):
+  ```typescript
+  apps.list()
+    .then(r => setAppList(r.data ?? []))
+    .catch(() => setError('Failed to load applications.'))
+    .finally(() => setLoading(false))
+  ```
 
-import (
-	"context"
-	"fmt"
-	"log"
+### 2.3 Search & Filter Logic
+- Real-time case-insensitive filter applied to `appList` (lines 29-32):
+  ```typescript
+  const filteredApps = appList.filter(app =>
+    app.Name.toLowerCase().includes(search.toLowerCase()) ||
+    app.ClientID.toLowerCase().includes(search.toLowerCase())
+  )
+  ```
+- **Stats Counter Logic:**
+  - Total Apps: `appList.length`
+  - Public PKCE Clients: `appList.filter(a => a.IsPublic).length`
+  - Confidential Clients: `appList.filter(a => !a.IsPublic).length`
+  - Active Cryptography Protocol: Static indicator for `ML-DSA-44` (FIPS 204).
 
-	"github.com/DilithiAuth/dilithiauth-go"
-)
-
-func main() {
-	client, err := dilithiauth.NewClient(dilithiauth.Config{
-		Domain:       "https://dilithiauthapis.gradientgeeks.tech",
-		ClientID:     "my-go-backend-client",
-		ClientSecret: "my-client-secret",
-		RedirectURI:  "http://localhost:8080/callback",
-	})
-	if err != nil {
-		log.Fatalf("Failed to initialize DilithiAuth client: %v", err)
-	}
-
-	// Step 1: Generate PKCE Pair
-	verifier, challenge, err := dilithiauth.GeneratePKCEPair()
-	if err != nil {
-		log.Fatalf("Failed to generate PKCE pair: %v", err)
-	}
-
-	// Step 2: Build Authorization URL
-	state := "random-csrf-state"
-	authURL := client.GetAuthorizationURL("http://localhost:8080/callback", state, challenge)
-	fmt.Println("Redirect user to:", authURL)
-
-	// Step 3: Exchange Authorization Code for Token
-	code := "received-authorization-code"
-	tokenResp, err := client.ExchangeCode(context.Background(), code, "http://localhost:8080/callback", verifier)
-	if err != nil {
-		log.Fatalf("Token exchange failed: %v", err)
-	}
-
-	fmt.Printf("Access Token: %s\n", tokenResp.AccessToken)
-	fmt.Printf("PQC Ref Hash: %s\n", tokenResp.PQCRef)
-
-	// Step 4: Verify & Parse Token Claims
-	claims, err := client.VerifyToken(context.Background(), tokenResp.AccessToken)
-	if err != nil {
-		log.Fatalf("Token verification failed: %v", err)
-	}
-	fmt.Printf("Authenticated Subject: %s\n", claims.Subject)
-}
-```
+### 2.4 UI Features & Copy Handling
+- `copyClientId(id: string, e: React.MouseEvent)`: Calls `navigator.clipboard.writeText(id)`, sets `copiedId = id`, resets after 2000ms. Stops click propagation to prevent table row navigation.
+- **Rendering States:**
+  - Loading: Animated skeleton cards (`.skeleton h-4`).
+  - Empty (No apps or no search matches): Empty state graphic with conditional call-to-action button.
+  - Table: Displays Name, Description, Client ID (with copy button), Type badge (Public vs Confidential), Creation Date (formatted via `toLocaleDateString`), and Details action link.
 
 ---
 
-### C. Python (`dilithiauth`)
+## 3. New Application Component Logic (`src/pages/NewApp.tsx`)
 
-#### Package Installation
-```bash
-pip install dilithiauth
-```
+### 3.1 Form State Management
+- `name`: `string` (Required)
+- `description`: `string` (Optional)
+- `homepageURL`: `string` (Optional)
+- `redirectURIs`: `string` (Required, multiline string parsed into array)
+- `isPublic`: `boolean` (Default: `false` for Confidential Client; `true` for Public Client/PKCE)
+- `loading`: `boolean` (Form submission state)
+- `error`: `string` (Submission error text)
+- `created`: `CreatedResult | null` where `interface CreatedResult { app: OAuthApp; secret?: string }`
+- `copied`: `boolean` (Copy feedback for Client Secret)
 
-#### Complete Authentication Flow
-```python
-from dilithiauth import DilithiAuthClient, generate_pkce_pair, generate_random_state
+### 3.2 Form Submission & Validation Logic
+- Handler `handleSubmit` (lines 26-40):
+  1. Prevents default form submit.
+  2. Splits `redirectURIs` input by newline, trims each entry, and filters out empty lines.
+  3. Validates that at least one URI exists; sets error if zero URIs.
+  4. Calls `apps.create({ name, description, homepage_url: homepageURL, redirect_uris: uris, is_public: isPublic })`.
+  5. On success: sets `created` state with returned `app` object and `client_secret` (if confidential).
+  6. On failure: extracts error message from `err?.response?.data?.error` or defaults to `'Failed to create application.'`.
 
-# Step 1: Initialize Client
-client = DilithiAuthClient(
-    client_id="my-python-app",
-    domain="https://dilithiauthapis.gradientgeeks.tech",
-    client_secret="my-secret-key",
-    redirect_uri="http://localhost:5000/callback"
-)
-
-# Step 2: Generate PKCE & Authorization URL
-code_verifier, code_challenge = generate_pkce_pair()
-state = generate_random_state()
-
-auth_url = client.get_authorization_url(
-    redirect_uri="http://localhost:5000/callback",
-    state=state,
-    code_challenge=code_challenge,
-    scope="openid profile email"
-)
-print("Navigate to:", auth_url)
-
-# Step 3: Exchange Code for Access Token
-auth_code = "incoming_authorization_code"
-token_response = client.exchange_code(
-    code=auth_code,
-    code_verifier=code_verifier,
-    redirect_uri="http://localhost:5000/callback"
-)
-
-access_token = token_response["access_token"]
-pqc_ref = token_response.get("pqc_ref")
-
-print(f"Access Token: {access_token[:20]}...")
-print(f"PQC Reference: {pqc_ref}")
-
-# Step 4: Fetch UserInfo & Verify Claims
-user_info = client.get_user_info(access_token)
-print(f"User Info: {user_info}")
-
-claims = client.verify_token(access_token)
-print(f"Token Subject: {claims['sub']}")
-```
+### 3.3 Post-Creation / Secret Display Screen
+- When `created` state is present, screen transitions to success state (lines 50-118):
+  - Displays `ClientID`.
+  - **Secret Handling:** If `created.secret` exists, renders an amber alert banner ("Save this Client Secret now! It will **never be shown again**") and a styled `<pre className="secret-box">`.
+  - Copy action: `copySecret()` writes `created.secret` to clipboard and provides a 2-second checkmark notification.
+  - If `isPublic` is true, displays info banner explaining PKCE mode requirement without client secrets.
+  - Actions: "View App Details →" (`navigate(/apps/${created.app.ID})`) or "Dashboard" (`navigate('/apps')`).
 
 ---
 
-### D. Java (`com.dilithiauth:dilithiauth-sdk`)
+## 4. Application Detail Component Logic (`src/pages/AppDetail.tsx`)
 
-#### Dependency Setup (Maven `pom.xml`)
-```xml
-<dependency>
-    <groupId>com.dilithiauth</groupId>
-    <artifactId>dilithiauth-sdk</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
+### 4.1 Data Fetching & State Management
+- `id`: Route parameter from `useParams<{ id: string }>()`.
+- `app`: `OAuthApp | null`.
+- `loading`: `boolean` (Initial fetch).
+- `error`: `string` (Error alert banner).
+- `activeTab`: `'overview' | 'snippets' | 'danger'` (Tab state, default `'overview'`).
+- `codeLang`: `'curl' | 'javascript' | 'go' | 'python' | 'java' | 'dotnet'` (SDK code snippet language selector).
 
-#### Initialization & Token Exchange Flow
-```java
-import com.dilithiauth.client.DilithiAuthClient;
-import com.dilithiauth.client.PKCE;
-import com.dilithiauth.client.TokenResponse;
-import com.dilithiauth.client.UserInfo;
+### 4.2 Lifecycle & API Integration
+- **Fetch App (`apps.get`):** Runs `useEffect` on `id` change (lines 36-39). Calls `apps.get(id)`, updates `app` or sets `'App not found.'` on error.
+- **Rotate Secret (`apps.rotateSecret`):**
+  - Handler `handleRotate` (lines 41-51): Confirmed via `ConfirmModal`. Sets `rotating` state to true. Calls `apps.rotateSecret(id)`.
+  - Updates `app` state with new app object and stores `client_secret` in `rotatedSecret` state.
+  - UI displays amber warning banner and one-time secret view until user clicks "I've Saved My Secret".
+- **Delete Application (`apps.delete`):**
+  - Handler `handleDelete` (lines 53-58): Confirmed via `ConfirmModal`. Sets `deleting` state to true. Calls `apps.delete(id)`.
+  - On success, redirects to `/apps` via `navigate('/apps')`.
+- **Edit Settings Handling:**
+  - **Analysis Finding:** `AppDetail.tsx` currently **does NOT implement application editing**.
+  - Application Configuration (Homepage URL, Creation Date, Redirect URIs) is displayed read-only in Tab 1.
+  - No `apps.update` method exists in `src/api.ts` nor is there an edit modal/form in `AppDetail.tsx`.
 
-public class App {
-    public static void main(String[] args) throws Exception {
-        // Step 1: Initialize Client via Builder
-        DilithiAuthClient client = DilithiAuthClient.builder()
-                .domain("https://dilithiauthapis.gradientgeeks.tech")
-                .clientId("my-java-enterprise-app")
-                .clientSecret("secret-value")
-                .redirectUri("https://enterprise.example.com/oauth/callback")
-                .build();
-
-        // Step 2: PKCE Generation & Auth URL
-        PKCE.Pair pkce = PKCE.generatePair();
-        String state = PKCE.generateState();
-
-        String authUrl = client.getAuthorizationUrl(
-                "https://enterprise.example.com/oauth/callback",
-                state,
-                pkce.getCodeChallenge(),
-                "openid profile email"
-        );
-        System.out.println("Authorization URL: " + authUrl);
-
-        // Step 3: Token Exchange
-        String code = "authorization_code_from_callback";
-        TokenResponse tokenResp = client.exchangeCode(code, pkce.getCodeVerifier(), "https://enterprise.example.com/oauth/callback");
-
-        System.out.println("Access Token: " + tokenResp.getAccessToken());
-        System.out.println("PQC Ref Hash: " + tokenResp.getPqcRef());
-
-        // Step 4: UserInfo Retrieval
-        UserInfo userInfo = client.getUserInfo(tokenResp.getAccessToken());
-        System.out.println("User Subject: " + userInfo.getSub());
-        System.out.println("User Email: " + userInfo.getEmail());
-    }
-}
-```
+### 4.3 Tab Features & Code Generator
+- **Tab 1: Overview:** Client ID copy button, Client Secret rotation / PKCE info, and read-only Application Configuration.
+- **Tab 2: Code Snippets:** Dynamically builds OAuth 2.0 / Post-Quantum authorization code exchange snippets for 6 programming languages (`cURL`, `JS/Node`, `Go`, `Python`, `Java`, `.NET`) populated with the current app's `ClientID` and `RedirectURI`.
+- **Tab 3: Danger Zone:** Permanent deletion trigger with modal confirmation.
 
 ---
 
-### E. .NET (`DilithiAuth.SDK` / `DilithiAuth.Client`)
+## 5. Summary of Findings & Next Steps (Milestone 1 Context)
 
-#### Package Installation
-```bash
-dotnet add package DilithiAuth.Client
-```
-
-#### Client Usage Example
-```csharp
-using System;
-using System.Threading.Tasks;
-using DilithiAuth.Client;
-
-class Program
-{
-    static async Task Main(string[] args)
-    {
-        // Step 1: Initialize Client
-        var options = new DilithiAuthOptions
-        {
-            Domain = "https://dilithiauthapis.gradientgeeks.tech",
-            ClientId = "dotnet-api-client",
-            ClientSecret = "client-secret-key",
-            RedirectUri = "https://localhost:5001/signin-oidc"
-        };
-
-        var client = new DilithiAuthClient(options);
-
-        // Step 2: PKCE Generation & Auth URL
-        PkcePair pkce = Pkce.GeneratePair();
-        string state = Pkce.GenerateState();
-
-        string authUrl = client.GetAuthorizationUrl(
-            redirectUri: "https://localhost:5001/signin-oidc",
-            state: state,
-            codeChallenge: pkce.CodeChallenge,
-            scope: "openid profile email"
-        );
-        Console.WriteLine($"Redirect user to: {authUrl}");
-
-        // Step 3: Exchange Code for Access Token
-        string code = "received_auth_code";
-        TokenResponse tokenResp = await client.ExchangeCodeAsync(code, pkce.CodeVerifier);
-
-        Console.WriteLine($"Access Token: {tokenResp.AccessToken}");
-        Console.WriteLine($"PQC Reference: {tokenResp.PqcRef}");
-
-        // Step 4: UserInfo & Token Verification
-        UserInfo userInfo = await client.GetUserInfoAsync(tokenResp.AccessToken);
-        Console.WriteLine($"Authenticated User Sub: {userInfo.Sub}");
-
-        Claims claims = client.VerifyToken(tokenResp.AccessToken);
-        Console.WriteLine($"Valid Subject Claim: {claims.Subject}");
-    }
-}
-```
-
----
-
-## 4. Verification & Methodologies
-
-1. **Backend Endpoints**: Verified via inspection of `cmd/server/main.go`, `cmd/server/demo_routes.go`, `pkg/oauth/oauth.go`, `pkg/oauth/authz_handlers.go`.
-2. **Post-Quantum Token Strategies**: Verified via implementation signatures in `pkg/oauth/oauth.go` (`IssueJWTThin`, `IssueJWTFull`, `IssueCWT`) and `pkg/signer/signer.go` (`ML-DSA-44` signature size ~2420 bytes, Ed25519 signature size 64 bytes).
-3. **SDK Implementations**: Verified via actual codebase inspection in `sdk/js`, `sdk/go`, `sdk/python`, `sdk/java`, and `sdk/dotnet`. All code examples match exact constructor parameters, method names, and payload structures.
+1. **Type Naming Consistency:** API module uses `OAuthApp` type.
+2. **Missing Edit Feature:** Application updating functionality (editing name, description, homepage URL, or redirect URIs) is currently unhandled in both `api.ts` (`apps` object) and `AppDetail.tsx`.
+3. **Secret Security Model:** Both `NewApp.tsx` and `AppDetail.tsx` follow strict ephemeral display patterns for client secrets, storing them in component state only after creation or rotation and warning the user that secrets are shown only once.

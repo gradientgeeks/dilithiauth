@@ -1,10 +1,14 @@
-## 2026-07-28T00:51:22Z
-Identity: teamwork_preview_explorer
-Working Directory: /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3
+## 2026-07-28T14:41:52Z
+You are an Explorer subagent for Milestone 1 (UI/UX Architecture & Redesign Specs).
+Your working directory for metadata is `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3`.
+Project code location: `/home/uttam/projects/DilithiAuth/frontend`.
 
-Objective: Conduct a technical survey of `pkg/transport` and inspect existing test/benchmark suites in DilithiAuth.
-Tasks:
-1. Examine `pkg/transport/` Go code. Analyze HTTP middleware enforcing `MaxHeaderBytes = 16 KiB`, sidecar signature store (`SigStore`), in-memory vs Redis storage model, lookup resolution for `pqc_ref`, cache TTL, and replay protection.
-2. Inspect existing unit tests and benchmark files across `pkg/signer`, `pkg/oauth`, `pkg/transport`, and `cmd/server`. Identify existing benchmark functions (e.g. `Benchmark*`), test coverage, and execution commands needed to gather empirical data for signing latency, verification latency, token sizes, and HTTP header overhead.
-3. Record your findings in `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/handoff.md` with clear section headers, code references, and benchmark execution instructions.
-4. Send a message to parent when finished.
+Task:
+Formulate technical design & architecture proposal for redesigning the developer portal:
+1. `SidebarLayout.tsx` (R1): persistent left sidebar, brand logo (DilithiAuth), nav links (Applications `/apps`, Docs `/docs`, Settings disabled), bottom user profile + Sign Out button. Tablet rail (768-1023px), Mobile drawer (<768px).
+2. `Dashboard.tsx` (R2): Auth0 console aesthetic, title/subtitle, "Create Application" CTA, search/filter bar, app cards/table with masked Client ID, quick copy button, type badges, empty state illustration.
+3. `NewApp.tsx` (R3): Wizard-style form (Basic Info -> App Type -> URIs), visual card selector for App Type (Public SPA vs Confidential Server-Side), post-creation success modal/screen with Client ID & Client Secret copy buttons + warning.
+4. `AppDetail.tsx` (R4): Settings panel with left sub-nav or tabs (Settings, Code Snippets, Danger Zone), clean form groups for settings, secret rotation, app deletion.
+5. List exact component file structure to create/update.
+
+Write your findings to `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/analysis.md` and your handoff report to `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_3/handoff.md`. Communicate your completion via `send_message` to parent (ID: 145f166d-e8fc-4e12-bee7-7f454f7d2939).

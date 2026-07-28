@@ -86,5 +86,11 @@ export const apps = {
   }) => api.post<{ app: OAuthApp; client_secret?: string }>('/apps', data),
   rotateSecret: (id: string) =>
     api.post<{ app: OAuthApp; client_secret: string }>(`/apps/${id}/rotate-secret`),
+  update: (id: string, data: {
+    name?: string
+    description?: string
+    homepage_url?: string
+    redirect_uris?: string[]
+  }) => api.put<OAuthApp>(`/apps/${id}`, data),
   delete: (id: string) => api.delete(`/apps/${id}`),
 }

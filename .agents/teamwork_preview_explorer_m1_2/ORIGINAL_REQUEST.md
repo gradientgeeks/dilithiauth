@@ -1,17 +1,13 @@
-## 2026-07-28T00:51:22Z
+## 2026-07-28T14:41:52Z
+You are an Explorer subagent for Milestone 1 (Component Logic & API Bindings).
+Your working directory for metadata is `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2`.
+Project code location: `/home/uttam/projects/DilithiAuth/frontend`.
 
-<USER_REQUEST>
-Identity: teamwork_preview_explorer
-Working Directory: /home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2
+Task:
+Investigate existing page logic and API bindings in `/home/uttam/projects/DilithiAuth/frontend/src`:
+1. `src/pages/Dashboard.tsx`: state management, API calls (`apps.list()`), search/filter logic if any, copy buttons, app list rendering.
+2. `src/pages/NewApp.tsx`: form state, app creation payload, API call (`apps.create()`), secret display / copy handling.
+3. `src/pages/AppDetail.tsx`: app fetching (`apps.get()`), secret rotation (`apps.rotateSecret()`), deletion (`apps.delete()`), edit settings handling.
+4. `src/api.ts` or `src/services/` API module: exact signature of all `apps.*` methods and types (`Application`, `CreateAppInput`, `RotateSecretOutput`, etc.).
 
-Objective: Conduct a technical survey of `pkg/oauth` and `cmd/server` in DilithiAuth.
-Tasks:
-1. Examine `pkg/oauth/` and `cmd/server/` Go code. Analyze OIDC Discovery (`/.well-known/openid-configuration`), JWKS (`/.well-known/jwks.json`), and public key publication (`mldsa44_pub`).
-2. Analyze the three token issuance strategies and their implementation:
-   - Thin Tokens (`POST /token/thin`): Ed25519 signature + `pqc_ref` SHA-256 hash reference.
-   - Jumbo Tokens (`POST /token/full`): Self-contained JWT embedding full ML-DSA-44 signature in `pqc_sig` claim.
-   - CBOR Web Tokens (CWT) (`POST /token/cwt`): Binary RFC 8392 token encoding.
-3. Compare claims structure, header/payload overhead, binary vs text encoding, and exact token payload sizes.
-4. Record your findings in `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2/handoff.md` with clear section headers, precise code references, and claim structures.
-5. Send a message to parent when finished.
-</USER_REQUEST>
+Write your findings to `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2/analysis.md` and your handoff report to `/home/uttam/projects/DilithiAuth/.agents/teamwork_preview_explorer_m1_2/handoff.md`. Communicate your completion via `send_message` to parent (ID: 145f166d-e8fc-4e12-bee7-7f454f7d2939).

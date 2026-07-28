@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
+import SidebarLayout from './components/layout/SidebarLayout'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -27,15 +28,21 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASENAME || ''}>
         <Routes>
+          {/* Public / Standalone routes with top Navbar */}
           <Route path="/" element={<RequireGuest><Landing /></RequireGuest>} />
           <Route path="/login" element={<RequireGuest><Login /></RequireGuest>} />
           <Route path="/register" element={<RequireGuest><Register /></RequireGuest>} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
-          <Route path="/apps" element={<RequireAuth><Dashboard /></RequireAuth>} />
-          <Route path="/apps/new" element={<RequireAuth><NewApp /></RequireAuth>} />
-          <Route path="/apps/:id" element={<RequireAuth><AppDetail /></RequireAuth>} />
+
+          {/* Authenticated Dashboard Shell using SidebarLayout */}
+          <Route element={<RequireAuth><SidebarLayout /></RequireAuth>}>
+            <Route path="/apps" element={<Dashboard />} />
+            <Route path="/apps/new" element={<NewApp />} />
+            <Route path="/apps/:id" element={<AppDetail />} />
+          </Route>
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
