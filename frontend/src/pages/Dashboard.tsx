@@ -160,7 +160,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3.5 border-b border-[var(--color-border)]">
                         <Link
                           to={`/apps/${app.ID}`}
-                          className="text-[var(--color-txt)] font-bold hover:text-[var(--color-primary)] no-underline hover:underline"
+                          className="text-[var(--color-txt)] font-bold hover:text-[var(--color-primary)] transition-colors"
                         >
                           {app.Name}
                         </Link>

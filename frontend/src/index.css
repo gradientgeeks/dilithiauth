@@ -67,7 +67,7 @@
   }
 
   a { color: var(--color-primary); text-decoration: none; transition: color .18s ease; }
-  a:hover { color: #60a5fa; text-decoration: underline; }
+  a:hover { color: #60a5fa; text-decoration: none; }
 
   /* Custom scrollbar */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
