@@ -1,35 +1,71 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Binaries and compiled programs
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
+server
+dilithiauth-server
+/dist/
+/tmp/
 
-# Code coverage profiles and other test artifacts
+# Code coverage and profiling artifacts
 *.out
 coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
+# Go workspace
 go.work
 go.work.sum
 
-# env file
+# Environment and secret files
 .env
-
-# Editor/IDE
-# .idea/
-# .vscode/
-server
-*.pem
+.env.*
+*.env
+!.env.example
 *.key
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.der
+id_rsa*
+*.pub.key
+credentials.json
+secrets.json
+origin.key
+gradientgeeks.tech.key
+gradientgeeks.tech.pem
+
+# Java and Maven build artifacts
+target/
+*.class
+.m2/
+*.jar
+*.war
+
+# Node.js and Frontend dependencies/builds
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Agent scratch and internal run logs
+.agents/
+.cache/
+
+# Editor and Operating System files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

@@ -1,8 +1,14 @@
 package verifier_test
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/oauth"
 	"github.com/Uttam-Mahata/DilithiAuth/pkg/signer"
@@ -185,5 +191,74 @@ func TestVerifyJWT_IssuerMatch(t *testing.T) {
 
 	if _, err := v.VerifyJWT(result.Token); err != nil {
 		t.Errorf("VerifyJWT() error = %v, want success for a matching issuer", err)
+	}
+}
+
+// TestVerifyJWT_MLDSASignatureTamperedIsRejected isolates the ML-DSA-44
+// (post-quantum) verification step from the surrounding Ed25519 + SigStore
+// hash-check layers. A black-box HTTP test can't produce this case: since
+// pqc_ref is itself covered by the Ed25519 signature, mutating the JWT
+// externally always trips Ed25519 first. Here, with direct access to the
+// signing key, we build a token whose Ed25519 signature is valid and whose
+// SigStore hash check passes (the corrupted signature's own SHA-256 is used
+// as pqc_ref), so the only thing that can fail is the ML-DSA-44 check
+// itself — proving it actually runs and isn't short-circuited by the
+// classical checks around it.
+func TestVerifyJWT_MLDSASignatureTamperedIsRejected(t *testing.T) {
+	kp, err := signer.GenerateHybridKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateHybridKeyPair() error = %v", err)
+	}
+	store := transport.NewSigStore()
+	v := verifier.NewVerifierWithKeyPair(kp, store)
+
+	now := time.Now()
+	claims := oauth.HybridClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "https://auth.dilithiauth.io",
+			Subject:   "alice",
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			ID:        "tampered-mldsa-test",
+		},
+		TenantID: "default",
+	}
+
+	payloadBytes, err := json.Marshal(claims.RegisteredClaims)
+	if err != nil {
+		t.Fatalf("marshalling claims: %v", err)
+	}
+
+	hybridSig, err := kp.Sign(payloadBytes)
+	if err != nil {
+		t.Fatalf("Sign() error = %v", err)
+	}
+
+	// Corrupt the ML-DSA-44 signature only. Ed25519Sig is untouched, and
+	// isn't part of what's re-verified below (VerifyJWT re-derives it via
+	// jwt-go against the token's own bytes) — the point is that pqc_ref
+	// is recomputed FROM the corrupted bytes, so the hash check the
+	// verifier does before calling VerifyMLDSA still passes.
+	corrupted := append([]byte(nil), hybridSig.MLDSASig...)
+	corrupted[0] ^= 0xFF
+
+	refBytes := sha256.Sum256(corrupted)
+	pqcRef := base64.RawURLEncoding.EncodeToString(refBytes[:])
+	claims.PQCRef = pqcRef
+	store.Put(pqcRef, corrupted)
+
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	token.Header["kid"] = kp.Kid
+	tokenStr, err := token.SignedString(kp.Ed25519Private)
+	if err != nil {
+		t.Fatalf("SignedString() error = %v", err)
+	}
+
+	_, err = v.VerifyJWT(tokenStr)
+	if err == nil {
+		t.Fatal("VerifyJWT() should fail when the ML-DSA-44 signature is tampered, even though Ed25519 and the pqc_ref hash check both pass")
+	}
+	if !strings.Contains(err.Error(), "ML-DSA-44 verification failed") {
+		t.Errorf("VerifyJWT() error = %q, want it to specifically report ML-DSA-44 failure (not Ed25519 or hash-check failure)", err.Error())
 	}
 }
